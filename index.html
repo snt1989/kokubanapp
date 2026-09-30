@@ -134,6 +134,16 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .status { margin: 0; min-height: 1.6em; font-size: 13px; color: var(--ink-2); }
 .note { margin: 0; color: var(--ink-2); font-size: 12px; max-width: 72ch; }
 
+.rowlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.rowitem { display: flex; align-items: center; gap: 6px; padding: 4px 6px 4px 12px; background: var(--surface); }
+.rowitem + .rowitem { border-top: 1px solid var(--line); }
+.rowchk { flex: 1; display: flex; align-items: center; gap: 10px; min-height: 36px; min-width: 0; cursor: pointer; }
+.rowchk input { flex: none; width: 18px; height: 18px; margin: 0; accent-color: var(--accent); }
+.mv { flex: none; width: 36px; height: 36px; padding: 0; border: 1px solid var(--line); border-radius: 5px; background: var(--surface-2); color: var(--ink); font-size: 13px; cursor: pointer; }
+.mv:disabled { opacity: .35; cursor: default; }
+.field.off { opacity: .6; }
+.field.off .lbl::after { content: "（黒板に出さない）"; font-weight: 400; font-size: 12px; color: var(--ink-2); }
+
 @media (prefers-reduced-motion: no-preference) {
   .th-main, .btn, .seg button { transition: background-color .12s, border-color .12s; }
 }
@@ -168,11 +178,11 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     <aside class="panel" aria-label="黒板の設定">
       <div class="group">
         <h2>黒板の内容</h2>
-        <div class="field">
+        <div class="field" data-row="kouji">
           <label class="lbl" for="f-kouji">工事名 <span class="chip">全写真で共通</span></label>
           <textarea id="f-kouji" rows="2" maxlength="80"></textarea>
         </div>
-        <div class="field">
+        <div class="field" data-row="sekou">
           <label class="lbl" for="f-sekou">施工者 <span class="chip">全写真で共通</span></label>
           <input type="text" id="f-sekou" maxlength="40">
         </div>
@@ -180,7 +190,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 
       <div class="group">
         <h2>この写真だけの項目</h2>
-        <div class="field">
+        <div class="field" data-row="kojishu">
           <label class="lbl" for="f-kojishu">工種</label>
           <input type="text" id="f-kojishu" list="kojishu-list" maxlength="30" autocomplete="off">
           <datalist id="kojishu-list">
@@ -189,26 +199,33 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
             <option value="管布設工"></option><option value="仮設工"></option><option value="出来形管理"></option>
           </datalist>
         </div>
-        <div class="field">
+        <div class="field" data-row="sokuten">
           <label class="lbl" for="f-sokuten">測点・箇所</label>
           <input type="text" id="f-sokuten" maxlength="40">
         </div>
-        <div class="field">
+        <div class="field" data-row="basho">
           <label class="lbl" for="f-basho">場所</label>
           <input type="text" id="f-basho" maxlength="40">
         </div>
-        <div class="field">
+        <div class="field" data-row="heya">
           <label class="lbl" for="f-heya">部屋番号</label>
           <input type="text" id="f-heya" maxlength="20">
         </div>
-        <div class="field">
+        <div class="field" data-row="bikou">
           <label class="lbl" for="f-bikou">備考</label>
           <textarea id="f-bikou" rows="2" maxlength="80"></textarea>
         </div>
-        <div class="field">
+        <div class="field" data-row="date">
           <label class="lbl" for="f-date">撮影日</label>
           <input type="date" id="f-date">
         </div>
+      </div>
+
+      <div class="group">
+        <h2>黒板の項目と順番</h2>
+        <p class="note">チェックを外した項目は黒板に出ません（入力した内容は残ります）。▲▼で順番を入れ替えます。全写真で共通です。</p>
+        <ul class="rowlist" id="row-list"></ul>
+        <button type="button" class="btn sub" id="btn-rows-reset">初期の並びに戻す</button>
       </div>
 
       <div class="group">
@@ -266,7 +283,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 (function () {
   'use strict';
 
-  var BOARD_W = 360, BOARD_H = 270, ASPECT = BOARD_H / BOARD_W;
+  var BOARD_W = 360;
   var FONT = '"M PLUS Rounded 1c","Hiragino Maru Gothic ProN","Hiragino Sans","Noto Sans JP",sans-serif';
   var LS_KEY = 'kokuban-shared-v1';
   var THEMES = {
@@ -277,7 +294,21 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 
   function $(s) { return document.querySelector(s); }
 
-  var shared = { kouji: '○○地区 排水路改修工事', sekou: '株式会社三桜', color: 'green', wareki: true, bw: 0.36 };
+  // 黒板に並べる項目（h: 行の高さ、n: 最大行数、base: 基本の文字サイズ）
+  var ROW_DEFS = {
+    kouji: { label: '工事名', h: 44, n: 2, base: 16, get: function () { return shared.kouji; } },
+    kojishu: { label: '工種', h: 26, n: 1, base: 17, get: function (p) { return p.kojishu; } },
+    sokuten: { label: '測点・箇所', h: 26, n: 1, base: 17, get: function (p) { return p.sokuten; } },
+    basho: { label: '場所', h: 26, n: 1, base: 17, get: function (p) { return p.basho; } },
+    heya: { label: '部屋番号', h: 26, n: 1, base: 17, get: function (p) { return p.heya; } },
+    bikou: { label: '備考', h: 42, n: 2, base: 15, get: function (p) { return p.bikou; } },
+    date: { label: '撮影日', h: 26, n: 1, base: 17, get: function (p) { return fmtDate(p.date); } },
+    sekou: { label: '施工者', h: 32, n: 1, base: 17, get: function () { return shared.sekou; } }
+  };
+  var ROW_IDS = ['kouji', 'kojishu', 'sokuten', 'basho', 'heya', 'bikou', 'date', 'sekou'];
+  function defaultRows() { return ROW_IDS.map(function (id) { return { id: id, on: true }; }); }
+
+  var shared = { kouji: '○○地区 排水路改修工事', sekou: '株式会社三桜', color: 'green', wareki: true, bw: 0.36, rows: defaultRows() };
   try {
     var saved = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
     if (saved && typeof saved === 'object') {
@@ -286,6 +317,15 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
       if (THEMES[saved.color]) shared.color = saved.color;
       if (typeof saved.wareki === 'boolean') shared.wareki = saved.wareki;
       if (typeof saved.bw === 'number' && saved.bw >= 0.15 && saved.bw <= 0.6) shared.bw = saved.bw;
+      if (Array.isArray(saved.rows) && saved.rows.length === ROW_IDS.length) {
+        var seen = {}, okRows = true, tmp = [];
+        saved.rows.forEach(function (r) {
+          if (!r || ROW_IDS.indexOf(r.id) < 0 || seen[r.id]) { okRows = false; return; }
+          seen[r.id] = true;
+          tmp.push({ id: r.id, on: r.on !== false });
+        });
+        if (okRows && tmp.some(function (r) { return r.on; })) shared.rows = tmp;
+      }
     }
   } catch (e) {}
   function saveShared() {
@@ -391,37 +431,32 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     return { size: min, lines: res };
   }
   function rowsFor(p) {
-    return [
-      { label: '工事名', text: shared.kouji, h: 44, n: 2, base: 16 },
-      { label: '工種', text: p.kojishu, h: 26, n: 1, base: 17 },
-      { label: '測点・箇所', text: p.sokuten, h: 26, n: 1, base: 17 },
-      { label: '場所', text: p.basho, h: 26, n: 1, base: 17 },
-      { label: '部屋番号', text: p.heya, h: 26, n: 1, base: 17 },
-      { label: '備考', text: p.bikou, h: 42, n: 2, base: 15 },
-      { label: '撮影日', text: fmtDate(p.date), h: 26, n: 1, base: 17 },
-      { label: '施工者', text: shared.sekou, h: 32, n: 1, base: 17 }
-    ];
+    return shared.rows.filter(function (r) { return r.on; }).map(function (r) {
+      var d = ROW_DEFS[r.id];
+      return { label: d.label, text: d.get(p), h: d.h, n: d.n, base: d.base };
+    });
   }
   function drawBoard(c, x, y, w, rows) {
-    var th = THEMES[shared.color], S = w / BOARD_W;
+    var th = THEMES[shared.color], S = w / BOARD_W, BH = 22;
+    rows.forEach(function (r) { BH += r.h; });
     c.save();
     c.translate(x, y);
     c.scale(S, S);
     c.shadowColor = 'rgba(0,0,0,.38)';
     c.shadowBlur = 9 * S;
     c.shadowOffsetY = 2 * S;
-    rr(c, 0, 0, BOARD_W, BOARD_H, 5);
+    rr(c, 0, 0, BOARD_W, BH, 5);
     c.fillStyle = th.frame;
     c.fill();
     c.shadowColor = 'transparent';
-    var g = c.createLinearGradient(0, 5, 0, BOARD_H - 5);
+    var g = c.createLinearGradient(0, 5, 0, BH - 5);
     g.addColorStop(0, th.s1);
     g.addColorStop(1, th.s2);
-    rr(c, 5, 5, BOARD_W - 10, BOARD_H - 10, 2);
+    rr(c, 5, 5, BOARD_W - 10, BH - 10, 2);
     c.fillStyle = g;
     c.fill();
 
-    var gx = 11, gy = 11, gw = BOARD_W - 22, gh = BOARD_H - 22, LW = 68, PAD = 8;
+    var gx = 11, gy = 11, gw = BOARD_W - 22, gh = BH - 22, LW = 68, PAD = 8;
     c.strokeStyle = th.line;
     c.lineWidth = 1.6;
     c.lineJoin = 'round';
@@ -454,8 +489,14 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   }
 
   /* ---------- 位置・大きさ ---------- */
-  function effBw(p) { return Math.min(shared.bw, 0.92 * p.ih / (p.iw * ASPECT), 0.7); }
-  function bhFrac(p) { return effBw(p) * p.iw * ASPECT / p.ih; }
+  function boardH() {
+    var h = 22;
+    shared.rows.forEach(function (r) { if (r.on) h += ROW_DEFS[r.id].h; });
+    return h;
+  }
+  function aspect() { return boardH() / BOARD_W; }
+  function effBw(p) { return Math.min(shared.bw, 0.92 * p.ih / (p.iw * aspect()), 0.7); }
+  function bhFrac(p) { return effBw(p) * p.iw * aspect() / p.ih; }
   function clampPos(p) {
     p.bx = Math.min(Math.max(p.bx, 0), Math.max(0, 1 - effBw(p)));
     p.by = Math.min(Math.max(p.by, 0), Math.max(0, 1 - bhFrac(p)));
@@ -668,6 +709,8 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     $('#f-heya').value = p.heya;
     $('#f-bikou').value = p.bikou;
     $('#f-date').value = p.date;
+    renderRowList();
+    syncRowFields();
     $('#f-size').value = Math.round(shared.bw * 100);
     $('#v-size').textContent = Math.round(shared.bw * 100) + '%';
     setPressed('#seg-color', 'data-v', shared.color);
@@ -690,6 +733,73 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     $('#fb-img').src = URL.createObjectURL(blob);
     $('#fallback').hidden = false;
   }
+
+  /* ---------- 黒板の項目（表示・順番） ---------- */
+  var focusKey = '';
+  function changeRows(fn) {
+    var olds = photos.map(function (p) { return bhFrac(p); });
+    fn();
+    photos.forEach(function (p, i) {
+      var nb = bhFrac(p);
+      if (p.by + olds[i] / 2 > 0.5) p.by += olds[i] - nb; // 下寄せの黒板は下端をそろえる
+      clampPos(p);
+    });
+    renderRowList();
+    syncRowFields();
+    saveShared();
+    requestDraw();
+  }
+  function syncRowFields() {
+    Array.prototype.forEach.call(document.querySelectorAll('[data-row]'), function (el) {
+      var id = el.getAttribute('data-row'), on = true;
+      shared.rows.forEach(function (r) { if (r.id === id) on = r.on; });
+      el.classList.toggle('off', !on);
+    });
+  }
+  function renderRowList() {
+    var box = $('#row-list');
+    box.textContent = '';
+    var onCount = shared.rows.filter(function (r) { return r.on; }).length;
+    shared.rows.forEach(function (r, i) {
+      var label = ROW_DEFS[r.id].label;
+      var li = document.createElement('li'); li.className = 'rowitem';
+      var lab = document.createElement('label'); lab.className = 'rowchk';
+      var cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = r.on;
+      cb.disabled = r.on && onCount <= 1;
+      cb.setAttribute('data-k', r.id + ':chk');
+      cb.addEventListener('change', function () {
+        focusKey = r.id + ':chk';
+        changeRows(function () { r.on = cb.checked; });
+      });
+      var t = document.createElement('span'); t.textContent = label;
+      lab.appendChild(cb); lab.appendChild(t);
+      li.appendChild(lab);
+      [['up', '▲', '上へ', -1], ['down', '▼', '下へ', 1]].forEach(function (d) {
+        var b = document.createElement('button'); b.type = 'button'; b.className = 'mv';
+        b.textContent = d[1];
+        b.setAttribute('aria-label', '「' + label + '」を' + d[2] + '移動');
+        b.setAttribute('data-k', r.id + ':' + d[0]);
+        var j = i + d[3];
+        b.disabled = j < 0 || j >= shared.rows.length;
+        b.addEventListener('click', function () {
+          focusKey = r.id + ':' + d[0];
+          changeRows(function () { var x = shared.rows[i]; shared.rows[i] = shared.rows[j]; shared.rows[j] = x; });
+        });
+        li.appendChild(b);
+      });
+      box.appendChild(li);
+    });
+    if (focusKey) {
+      var el = box.querySelector('[data-k="' + focusKey + '"]');
+      if (el && el.disabled) el = el.parentNode.querySelector('.mv:not(:disabled)');
+      if (el) el.focus();
+      focusKey = '';
+    }
+  }
+  $('#btn-rows-reset').addEventListener('click', function () {
+    focusKey = '';
+    changeRows(function () { shared.rows = defaultRows(); });
+  });
 
   /* ---------- 入力 ---------- */
   function bind(id, fn) { $(id).addEventListener('input', function (e) { fn(e.target.value); requestDraw(); }); }
