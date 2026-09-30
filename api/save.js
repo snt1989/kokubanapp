@@ -71,6 +71,7 @@ export default async function handler(req, res) {
     given = '';
   }
   if (!sameKey(given, need)) {
+    await new Promise((resolve) => setTimeout(resolve, 700)); // 総当たりを遅くする
     return res.status(401).json({ error: '保存用パスワードが違います。' });
   }
 

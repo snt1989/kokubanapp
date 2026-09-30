@@ -87,9 +87,10 @@ h1 { margin: 0; font-family: var(--f-display); font-weight: 400; font-size: 22px
 .chip { display: inline-block; font-size: 11px; font-weight: 500; line-height: 1.5; padding: 0 7px; border: 1px solid var(--line); border-radius: 999px; color: var(--ink-2); white-space: nowrap; }
 .chip.warn { border-color: var(--mark); color: var(--ink); }
 
-.canvas-wrap { display: block; background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 10px; }
+.canvas-wrap { position: relative; display: block; background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 10px; }
 .canvas-wrap.over { outline: 2px dashed var(--mark); outline-offset: -6px; }
-#cv { display: block; margin-inline: auto; max-width: 100%; max-height: 72vh; width: auto; height: auto; touch-action: none; border-radius: 2px; }
+#cv { display: block; margin-inline: auto; max-width: 100%; max-height: 72vh; width: auto; height: auto; border-radius: 2px; }
+#grab { position: absolute; left: 0; top: 0; width: 0; height: 0; touch-action: none; }
 #cv:focus-visible { outline: 2px solid var(--mark); outline-offset: 3px; }
 .hint { margin: 0; color: var(--ink-2); font-size: 13px; }
 
@@ -168,6 +169,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
       </div>
       <div class="canvas-wrap" id="drop">
         <canvas id="cv" tabindex="0" role="img" aria-label="小黒板を合成した写真のプレビュー。矢印キーで黒板を移動、プラスとマイナスで大きさを変更できます。"></canvas>
+        <div id="grab" aria-hidden="true"></div>
       </div>
       <p class="hint" id="hint">黒板をドラッグで移動、右下の黄色い角をドラッグで大きさを変更します。写真はここにドロップしても追加できます。</p>
       <div class="strip" id="strip"></div>
@@ -281,6 +283,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
         </div>
         <button type="button" class="btn" id="btn-server">サーバーに保存（写真と入力内容）</button>
         <p class="status" id="server-status" role="status" aria-live="polite"></p>
+        <p class="note">保存に成功すると、パスワードはこの端末のブラウザに記憶されます。共用の端末では使わないでください。</p>
       </div>
     </aside>
   </main>
@@ -377,7 +380,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   }
 
   var photos = [], cur = -1, nextId = 1;
-  var cv = $('#cv'), cx = cv.getContext('2d');
+  var cv = $('#cv'), cx = cv.getContext('2d'), grab = $('#grab');
   var downloads = null;
   var downloadsReady = (window.claude && typeof window.claude.use === 'function')
     ? window.claude.use('downloads').then(function (d) { downloads = d; return d; }, function () { return null; })
@@ -610,6 +613,12 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     var rect = cv.getBoundingClientRect();
     var k = rect.width ? W / rect.width : 1;
     renderTo(cx, W, H, p, k);
+    // 黒板（と大きさ変更の角）の上にだけ、ドラッグ用の透明な板を重ねる
+    var g = geom(p, W, H), sx = cv.clientWidth / W, sy = cv.clientHeight / H, pd = 18;
+    grab.style.left = (cv.offsetLeft + g.x * sx - pd) + 'px';
+    grab.style.top = (cv.offsetTop + g.y * sy - pd) + 'px';
+    grab.style.width = (g.w * sx + pd * 2) + 'px';
+    grab.style.height = (g.h * sy + pd * 2) + 'px';
     var t = textOf(p);
     if (t !== warmedFor) { warmedFor = t; warmFonts(t).then(requestDraw); }
   }
@@ -661,6 +670,16 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   }
 
   /* ---------- 写真の追加・切り替え ---------- */
+  function makeThumb(img) {
+    try {
+      var s = Math.min(1, 184 / Math.max(img.naturalWidth, img.naturalHeight));
+      var c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(img.naturalWidth * s));
+      c.height = Math.max(1, Math.round(img.naturalHeight * s));
+      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+      return c.toDataURL('image/jpeg', 0.7);
+    } catch (e) { return img.src; }
+  }
   function loadPhoto(f) {
     var url = URL.createObjectURL(f);
     return new Promise(function (res, rej) {
@@ -671,7 +690,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     }).then(function (img) {
       return readExifDate(f).then(function (ex) {
         var p = {
-          id: nextId++, name: f.name, url: url, thumb: url, img: img,
+          id: nextId++, name: f.name, url: url, thumb: makeThumb(img), img: img,
           iw: img.naturalWidth, ih: img.naturalHeight,
           vals: newVals(ex || ymd(new Date(f.lastModified || Date.now()))),
           bx: 0, by: 0, sample: false
@@ -919,6 +938,8 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('over'); });
   });
   drop.addEventListener('drop', function (e) { if (e.dataTransfer && e.dataTransfer.files.length) addFiles(e.dataTransfer.files); });
+  window.addEventListener('dragover', function (e) { e.preventDefault(); });
+  window.addEventListener('drop', function (e) { e.preventDefault(); });
 
   /* ---------- 黒板のドラッグ ---------- */
   var drag = null;
@@ -934,20 +955,20 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     if (m.px >= g.x - s && m.px <= g.x + g.w + s && m.py >= g.y - s && m.py <= g.y + g.h + s) return 'move';
     return '';
   }
-  cv.addEventListener('pointerdown', function (e) {
+  grab.addEventListener('pointerdown', function (e) {
     if (cur < 0) return;
     var p = photos[cur], m = metrics(e), mode = hit(m, p);
     if (!mode) return;
     drag = { mode: mode, dx: m.fx - p.bx, dy: m.fy - p.by };
-    try { cv.setPointerCapture(e.pointerId); } catch (err) {}
+    try { grab.setPointerCapture(e.pointerId); } catch (err) {}
     cv.focus({ preventScroll: true });
     e.preventDefault();
   });
-  cv.addEventListener('pointermove', function (e) {
+  grab.addEventListener('pointermove', function (e) {
     var p = photos[cur], m = metrics(e);
     if (!drag) {
       var h = hit(m, p);
-      cv.style.cursor = h === 'resize' ? 'nwse-resize' : (h === 'move' ? 'grab' : 'default');
+      grab.style.cursor = h === 'resize' ? 'nwse-resize' : (h === 'move' ? 'grab' : 'default');
       return;
     }
     if (drag.mode === 'move') {
@@ -962,8 +983,8 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     requestDraw();
   });
   function endDrag() { if (drag && drag.mode === 'resize') saveShared(); drag = null; }
-  cv.addEventListener('pointerup', endDrag);
-  cv.addEventListener('pointercancel', endDrag);
+  grab.addEventListener('pointerup', endDrag);
+  grab.addEventListener('pointercancel', endDrag);
   cv.addEventListener('keydown', function (e) {
     var p = photos[cur], st = e.shiftKey ? 0.05 : 0.01, used = true;
     if (e.key === 'ArrowLeft') p.bx -= st;
@@ -1127,7 +1148,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
       else if (st === 413) serverStatus('画像が大きすぎて送れませんでした。');
       else if (st === 503) serverStatus((err.message || '保存先が未設定です。'));
       else if (img) serverStatus('写真は保存しましたが、入力内容の保存に失敗しました。もう一度押すと両方を保存し直します。', img.url);
-      else serverStatus((err && err.message) || '保存に失敗しました。通信状況を確認してもう一度お試しください。');
+      else serverStatus((err && err.status && err.message) || '保存に失敗しました。通信状況を確認してもう一度お試しください。');
     }).then(function () { serverBusy = false; btn.disabled = false; });
   });
 
