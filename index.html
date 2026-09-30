@@ -144,7 +144,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   <header class="top">
     <svg class="mark" viewBox="0 0 44 30" aria-hidden="true"><rect x="1" y="1" width="42" height="28" rx="3" fill="#25574a" stroke="#d8d3c4" stroke-width="2"/><path d="M8 10h28M8 16h28M8 22h20" stroke="#f3f3ea" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
     <h1>後付け小黒板</h1>
-    <p class="lead">撮影済みの写真に、工事用の小黒板をあとから合成して書き出します。写真はこのページの中だけで処理され、外部には送信されません。</p>
+    <p class="lead">撮影済みの写真に、工事用の小黒板をあとから合成して書き出します。写真はこのページの中だけで処理されます。「サーバーに保存」を押したときだけ、保存先に送信されます。</p>
   </header>
 
   <main class="app">
@@ -248,6 +248,15 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
         <button type="button" class="btn sub" id="btn-add">写真を追加</button>
         <p class="status" id="status" role="status" aria-live="polite"></p>
         <p class="note">公共工事の提出写真では、撮影後の加工を認めない基準があります。提出先の要領を確認してください。書き出した画像には、元の写真のExif情報（撮影日時・位置情報）は引き継がれません。</p>
+      </div>
+      <div class="group" id="grp-server" hidden>
+        <h2>サーバーに保存</h2>
+        <div class="field">
+          <label class="lbl" for="f-key">保存用パスワード</label>
+          <input type="password" id="f-key" autocomplete="off" maxlength="100">
+        </div>
+        <button type="button" class="btn" id="btn-server">サーバーに保存（写真と入力内容）</button>
+        <p class="status" id="server-status" role="status" aria-live="polite"></p>
       </div>
     </aside>
   </main>
@@ -833,6 +842,105 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     }).then(function () { saving = false; btn.disabled = false; });
   });
 
+  /* ---------- サーバーに保存（Vercel Blob / api/save） ---------- */
+  var KEY_LS = 'kokuban-savekey-v1';
+  var SERVER_MAX = 4 * 1024 * 1024;
+  var serverBusy = false;
+
+  function serverStatus(text, href) {
+    var el = $('#server-status');
+    el.textContent = text || '';
+    if (href) {
+      el.appendChild(document.createTextNode(' '));
+      var a = document.createElement('a');
+      a.href = href; a.target = '_blank'; a.rel = 'noopener'; a.textContent = '写真を開く';
+      el.appendChild(a);
+    }
+  }
+  function renderBlob(p, longSide, q) {
+    var s = Math.min(1, longSide / Math.max(p.iw, p.ih));
+    var W = Math.round(p.iw * s), H = Math.round(p.ih * s);
+    var c = document.createElement('canvas'); c.width = W; c.height = H;
+    renderTo(c.getContext('2d'), W, H, p, 0);
+    return new Promise(function (res) { c.toBlob(res, 'image/jpeg', q); });
+  }
+  // 送信できる大きさ（約4MB）に収まるまで、画質→大きさの順に下げる
+  function jpegUnder(p, maxBytes) {
+    var side = 4096, q = 0.92, tries = 0;
+    function step() {
+      return renderBlob(p, side, q).then(function (b) {
+        if (!b) throw { code: 'no_blob' };
+        if (b.size <= maxBytes) return b;
+        if (++tries > 12) throw { code: 'too_big' };
+        if (q > 0.72) q -= 0.08; else { side = Math.round(side * 0.85); q = 0.86; }
+        return step();
+      });
+    }
+    return step();
+  }
+  function postApi(kind, name, key, body, type) {
+    return fetch('/api/save?kind=' + kind + '&name=' + encodeURIComponent(name), {
+      method: 'POST',
+      headers: { 'content-type': type, 'x-save-key': encodeURIComponent(key) },
+      body: body
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) {
+        if (!r.ok) throw { status: r.status, message: j.error };
+        return j;
+      });
+    });
+  }
+  function probeServer() {
+    if (window.claude || !/^https?:$/.test(location.protocol) || !window.fetch) return;
+    fetch('/api/save', { cache: 'no-store' }).then(function (r) {
+      return r.ok ? r.json() : null;
+    }).then(function (j) {
+      if (!j || !j.ok) return;
+      $('#grp-server').hidden = false;
+      try { $('#f-key').value = localStorage.getItem(KEY_LS) || ''; } catch (e) {}
+      if (!j.ready) {
+        $('#btn-server').disabled = true;
+        serverStatus('保存先が未設定です。VercelでBlobの接続と SAVE_KEY の登録をしてから、再デプロイしてください。');
+      }
+    }).catch(function () {});
+  }
+  $('#btn-server').addEventListener('click', function () {
+    if (serverBusy || cur < 0) return;
+    var p = photos[cur], key = $('#f-key').value;
+    if (p.sample) { serverStatus('サンプル画像は保存できません。写真を追加してください。'); return; }
+    if (!key) { serverStatus('保存用パスワードを入力してください。'); return; }
+    serverBusy = true;
+    var btn = $('#btn-server'); btn.disabled = true;
+    serverStatus('画像を作成しています…');
+    var name = fileNameFor(p), img = null;
+    warmFonts(textOf(p)).then(function () {
+      return jpegUnder(p, SERVER_MAX);
+    }).then(function (blob) {
+      serverStatus('サーバーに送信しています…（' + (blob.size / 1048576).toFixed(1) + 'MB）');
+      return postApi('image', name, key, blob, 'application/octet-stream');
+    }).then(function (saved) {
+      img = saved;
+      var meta = {
+        kouji: shared.kouji, sekou: shared.sekou, kojishu: p.kojishu, sokuten: p.sokuten,
+        basho: p.basho, heya: p.heya, bikou: p.bikou, date: p.date, dateLabel: fmtDate(p.date),
+        originalName: p.name, color: shared.color, imageUrl: saved.url, imagePathname: saved.pathname
+      };
+      return postApi('meta', name, key, JSON.stringify(meta), 'application/json');
+    }).then(function () {
+      try { localStorage.setItem(KEY_LS, key); } catch (e) {}
+      serverStatus('保存しました。', img.url);
+    }).catch(function (err) {
+      var st = err && err.status, code = err && err.code;
+      if (code === 'too_big') serverStatus('画像を4MB以内にできませんでした。');
+      else if (code === 'no_blob') serverStatus('画像を作成できませんでした。写真が大きすぎる可能性があります。');
+      else if (st === 401) serverStatus('保存用パスワードが違います。');
+      else if (st === 413) serverStatus('画像が大きすぎて送れませんでした。');
+      else if (st === 503) serverStatus((err.message || '保存先が未設定です。'));
+      else if (img) serverStatus('写真は保存しましたが、入力内容の保存に失敗しました。もう一度押すと両方を保存し直します。', img.url);
+      else serverStatus((err && err.message) || '保存に失敗しました。通信状況を確認してもう一度お試しください。');
+    }).then(function () { serverBusy = false; btn.disabled = false; });
+  });
+
   /* ---------- 起動 ---------- */
   photos = [makeSample()];
   cur = 0;
@@ -840,6 +948,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   renderStrip();
   syncForm();
   requestDraw();
+  probeServer();
 })();
 </script>
 </body>

@@ -1,7 +1,7 @@
 # 後付け小黒板
 
 撮影済みの写真に、工事用の小黒板をあとから合成して JPEG で書き出すブラウザアプリです。
-`index.html` 1ファイルだけで動きます。写真はブラウザの中だけで処理され、外部には送信されません。
+`index.html` 1ファイルだけで動きます。写真はブラウザの中だけで処理されます。「サーバーに保存」を押したときだけ、Vercel Blob に送信されます。
 
 ## 使い方
 
@@ -19,6 +19,25 @@
 - 黒板の色: 緑 / 黒 / 白
 - 書き出しは長辺4096pxまでのJPEG
 - 工事名・施工者・色・大きさはブラウザに記憶されます（localStorage）
+- サーバーに保存（Vercel にデプロイしたときだけ表示）: 黒板つきの写真（JPEG）と、黒板の入力内容（JSON）を Vercel Blob に保存します。写真は送信用に約4MB以内へ縮小されます
+
+## Vercel にデプロイして「サーバーに保存」を使う
+
+`api/save.js` が保存を受け付けます。次の設定が必要です。
+
+1. Vercel でこのリポジトリをインポートしてデプロイする（Framework Preset は「Other」）
+2. プロジェクトの **Storage** タブで **Blob** ストアを作成し、このプロジェクトに接続する（環境変数 `BLOB_READ_WRITE_TOKEN` が自動で入ります）
+3. **Settings → Environment Variables** に `SAVE_KEY` を追加する（保存用パスワード。社内で共有する合言葉を決めてください）
+4. 再デプロイする
+
+設定が終わると、画面の右側に「サーバーに保存」が出ます。保存用パスワードを入力して押すと、保存できます。
+保存先は Vercel の **Storage → Blob** で確認できます。`kokuban/年-月/` の下に、写真（.jpg）と入力内容（.json）が入ります。
+
+### 保存について
+
+- 保存用パスワード（`SAVE_KEY`）が合っていないと保存できません。パスワードを知らない人は、アプリを開いても保存できません。
+- 保存した写真のURLは、推測されにくい文字列がついていますが、URLを知っていれば誰でも見られます（公開設定の Blob）。URLの取り扱いに注意してください。
+- `SAVE_KEY` と `BLOB_READ_WRITE_TOKEN` は、コードや README に書かず、Vercel の環境変数にだけ入れてください。
 
 ## 注意
 
@@ -28,5 +47,5 @@
 
 ## 開発メモ
 
-- 外部ライブラリなし。フォントのみ Google Fonts（Dela Gothic One / M PLUS Rounded 1c / Zen Kaku Gothic New）を読み込みます。
+- 画面（`index.html`）は外部ライブラリなし。サーバー側（`api/save.js`）だけ `@vercel/blob` を使います。フォントは Google Fonts（Dela Gothic One / M PLUS Rounded 1c / Zen Kaku Gothic New）を読み込みます。
 - 黒板は Canvas に描画しています。書き出し時は元の解像度（上限4096px）で描き直します。
