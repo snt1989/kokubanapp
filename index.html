@@ -194,6 +194,14 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
           <input type="text" id="f-sokuten" maxlength="40">
         </div>
         <div class="field">
+          <label class="lbl" for="f-basho">場所</label>
+          <input type="text" id="f-basho" maxlength="40">
+        </div>
+        <div class="field">
+          <label class="lbl" for="f-heya">部屋番号</label>
+          <input type="text" id="f-heya" maxlength="20">
+        </div>
+        <div class="field">
           <label class="lbl" for="f-bikou">備考</label>
           <textarea id="f-bikou" rows="2" maxlength="80"></textarea>
         </div>
@@ -249,7 +257,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 (function () {
   'use strict';
 
-  var BOARD_W = 360, BOARD_H = 240, ASPECT = BOARD_H / BOARD_W;
+  var BOARD_W = 360, BOARD_H = 270, ASPECT = BOARD_H / BOARD_W;
   var FONT = '"M PLUS Rounded 1c","Hiragino Maru Gothic ProN","Hiragino Sans","Noto Sans JP",sans-serif';
   var LS_KEY = 'kokuban-shared-v1';
   var THEMES = {
@@ -375,12 +383,14 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   }
   function rowsFor(p) {
     return [
-      { label: '工事名', text: shared.kouji, h: 46, n: 2, base: 17 },
-      { label: '工種', text: p.kojishu, h: 30, n: 1, base: 19 },
-      { label: '測点・箇所', text: p.sokuten, h: 30, n: 1, base: 19 },
-      { label: '備考', text: p.bikou, h: 46, n: 2, base: 17 },
-      { label: '撮影日', text: fmtDate(p.date), h: 28, n: 1, base: 18 },
-      { label: '施工者', text: shared.sekou, h: 38, n: 1, base: 19 }
+      { label: '工事名', text: shared.kouji, h: 44, n: 2, base: 16 },
+      { label: '工種', text: p.kojishu, h: 26, n: 1, base: 17 },
+      { label: '測点・箇所', text: p.sokuten, h: 26, n: 1, base: 17 },
+      { label: '場所', text: p.basho, h: 26, n: 1, base: 17 },
+      { label: '部屋番号', text: p.heya, h: 26, n: 1, base: 17 },
+      { label: '備考', text: p.bikou, h: 42, n: 2, base: 15 },
+      { label: '撮影日', text: fmtDate(p.date), h: 26, n: 1, base: 17 },
+      { label: '施工者', text: shared.sekou, h: 32, n: 1, base: 17 }
     ];
   }
   function drawBoard(c, x, y, w, rows) {
@@ -480,7 +490,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 
   function textOf(p) {
     var t = '工事名工種測点・箇所備考撮影日施工者0123456789年月日令和平成昭和元' + shared.kouji + shared.sekou;
-    return t + p.kojishu + p.sokuten + p.bikou + fmtDate(p.date);
+    return t + p.kojishu + p.sokuten + p.basho + p.heya + p.bikou + fmtDate(p.date);
   }
   function warmFonts(text) {
     if (!document.fonts || !document.fonts.load) return Promise.resolve();
@@ -549,7 +559,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     x.fillStyle = '#f4f4f0'; x.beginPath(); x.moveTo(1358, 1030); x.lineTo(1422, 1030); x.lineTo(1430, 1058); x.lineTo(1350, 1058); x.closePath(); x.fill();
     return {
       id: nextId++, name: 'サンプル画像（配筋）', url: '', thumb: c.toDataURL('image/jpeg', 0.7), img: c, iw: W, ih: H,
-      kojishu: 'クリーニング工', sokuten: 'No.12+5.0 底版', bikou: '配筋状況 D13 @200', date: ymd(new Date()),
+      kojishu: 'クリーニング工', sokuten: 'No.12+5.0 底版', basho: '本館 3階 廊下', heya: '302', bikou: '配筋状況 D13 @200', date: ymd(new Date()),
       bx: 0, by: 0, sample: true
     };
   }
@@ -567,7 +577,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
         var p = {
           id: nextId++, name: f.name, url: url, thumb: url, img: img,
           iw: img.naturalWidth, ih: img.naturalHeight,
-          kojishu: '', sokuten: '', bikou: '',
+          kojishu: '', sokuten: '', basho: '', heya: '', bikou: '',
           date: ex || ymd(new Date(f.lastModified || Date.now())),
           bx: 0, by: 0, sample: false
         };
@@ -645,6 +655,8 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     $('#f-sekou').value = shared.sekou;
     $('#f-kojishu').value = p.kojishu;
     $('#f-sokuten').value = p.sokuten;
+    $('#f-basho').value = p.basho;
+    $('#f-heya').value = p.heya;
     $('#f-bikou').value = p.bikou;
     $('#f-date').value = p.date;
     $('#f-size').value = Math.round(shared.bw * 100);
@@ -676,6 +688,8 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   bind('#f-sekou', function (v) { shared.sekou = v; saveShared(); });
   bind('#f-kojishu', function (v) { photos[cur].kojishu = v; });
   bind('#f-sokuten', function (v) { photos[cur].sokuten = v; });
+  bind('#f-basho', function (v) { photos[cur].basho = v; });
+  bind('#f-heya', function (v) { photos[cur].heya = v; });
   bind('#f-bikou', function (v) { photos[cur].bikou = v; });
   bind('#f-date', function (v) { photos[cur].date = v; });
   $('#f-size').addEventListener('input', function (e) {
@@ -772,7 +786,8 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 
   /* ---------- 書き出し ---------- */
   function fileNameFor(p) {
-    var parts = ['工事写真', p.sokuten || p.kojishu, (p.date || '').replace(/-/g, '')].filter(Boolean);
+    var where = p.sokuten || [p.basho, p.heya].filter(Boolean).join('-') || p.kojishu;
+    var parts = ['工事写真', where, (p.date || '').replace(/-/g, '')].filter(Boolean);
     var name = parts.join('_').replace(/[\\\/:*?"<>|\s]+/g, '-').slice(0, 80);
     return name + '.jpg';
   }
