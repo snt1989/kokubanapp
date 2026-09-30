@@ -9,6 +9,14 @@ const META_KEYS = [
   'date', 'dateLabel', 'originalName', 'color', 'imageUrl', 'imagePathname'
 ];
 
+// 保存先の接続: 新しい方式は BLOB_STORE_ID（VercelのOIDC）、従来は BLOB_READ_WRITE_TOKEN
+function hasBlobAuth() {
+  return Boolean(process.env.BLOB_STORE_ID || process.env.BLOB_READ_WRITE_TOKEN);
+}
+function isReady() {
+  return hasBlobAuth() && Boolean(process.env.SAVE_KEY);
+}
+
 function safeName(s, fallback) {
   const t = String(s || '')
     .replace(/[\\/:*?"<>|\s]+/g, '-')
@@ -45,10 +53,7 @@ export default async function handler(req, res) {
 
   // 画面が「保存先があるか」を調べるための確認用
   if (req.method === 'GET') {
-    return res.status(200).json({
-      ok: true,
-      ready: Boolean(process.env.BLOB_READ_WRITE_TOKEN) && Boolean(process.env.SAVE_KEY)
-    });
+    return res.status(200).json({ ok: true, ready: isReady() });
   }
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'GET, POST');
@@ -56,7 +61,7 @@ export default async function handler(req, res) {
   }
 
   const need = process.env.SAVE_KEY;
-  if (!need || !process.env.BLOB_READ_WRITE_TOKEN) {
+  if (!need || !hasBlobAuth()) {
     return res.status(503).json({ error: 'サーバー側の設定（SAVE_KEY / Blob）が未完了です。' });
   }
   let given = '';
