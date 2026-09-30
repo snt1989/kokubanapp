@@ -306,7 +306,9 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     sekou: { label: '施工者', h: 32, n: 1, base: 17, get: function () { return shared.sekou; } }
   };
   var ROW_IDS = ['kouji', 'kojishu', 'sokuten', 'basho', 'heya', 'bikou', 'date', 'sekou'];
-  function defaultRows() { return ROW_IDS.map(function (id) { return { id: id, on: true }; }); }
+  // 標準で黒板に出す項目（測点・箇所、場所、部屋番号は必要なときにチェックする）
+  var DEFAULT_OFF = ['sokuten', 'basho', 'heya'];
+  function defaultRows() { return ROW_IDS.map(function (id) { return { id: id, on: DEFAULT_OFF.indexOf(id) < 0 }; }); }
 
   var shared = { kouji: '○○地区 排水路改修工事', sekou: '株式会社三桜', color: 'green', wareki: true, bw: 0.36, rows: defaultRows() };
   try {
