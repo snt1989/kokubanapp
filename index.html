@@ -105,6 +105,7 @@ h1 { margin: 0; font-family: var(--f-display); font-weight: 400; font-size: 22px
 
 .fallback { border: 1px solid var(--line); border-radius: 6px; padding: 12px; background: var(--surface); display: flex; flex-direction: column; gap: 8px; }
 .fallback p { margin: 0; }
+.fb-actions { display: flex; flex-direction: column; gap: 8px; }
 .fallback img { display: block; width: 100%; height: auto; border-radius: 3px; }
 
 .panel { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
@@ -173,10 +174,6 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
       </div>
       <p class="hint" id="hint">黒板をドラッグで移動、右下の黄色い角をドラッグで大きさを変更します。写真はここにドロップしても追加できます。</p>
       <div class="strip" id="strip"></div>
-      <section class="fallback" id="fallback" hidden>
-        <p><strong>この表示では保存ボタンが使えません。</strong>下の画像を長押し（パソコンでは右クリック）して保存してください。</p>
-        <img id="fb-img" alt="黒板を合成した完成画像">
-      </section>
       <input type="file" id="file" accept="image/*" multiple hidden>
     </section>
 
@@ -273,6 +270,14 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
         <button type="button" class="btn" id="btn-save">この写真を保存（JPEG）</button>
         <button type="button" class="btn sub" id="btn-add">写真を追加</button>
         <p class="status" id="status" role="status" aria-live="polite"></p>
+        <section class="fallback" id="fallback" hidden>
+          <p id="fb-msg"></p>
+          <img id="fb-img" alt="黒板を合成した完成画像">
+          <div class="fb-actions" id="fb-actions" hidden>
+            <button type="button" class="btn" id="btn-share">共有・保存（写真アプリへ）</button>
+            <button type="button" class="btn sub" id="btn-dl">ファイルとして保存</button>
+          </div>
+        </section>
         <p class="note">公共工事の提出写真では、撮影後の加工を認めない基準があります。提出先の要領を確認してください。書き出した画像には、元の写真のExif情報（撮影日時・位置情報）は引き継がれません。</p>
       </div>
       <div class="group" id="grp-server" hidden>
@@ -779,17 +784,57 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
       ? 'サンプル画像です。写真を追加するとサンプルは消えます。黒板をドラッグで移動、右下の黄色い角で大きさを変更できます。'
       : '黒板をドラッグで移動、右下の黄色い角をドラッグで大きさを変更します。写真はここにドロップしても追加できます。';
   }
+  // 完成画像の表示欄。スマホでは「共有・保存」ボタンと、画像の長押し保存を案内する
+  var resultBlob = null, resultName = '';
   function hideFallback() {
     $('#fallback').hidden = true;
     var im = $('#fb-img');
     if (im.src && im.src.indexOf('blob:') === 0) URL.revokeObjectURL(im.src);
     im.removeAttribute('src');
+    resultBlob = null;
   }
-  function showFallback(blob) {
+  function asFile(blob, name) {
+    try { return new File([blob], name, { type: 'image/jpeg' }); } catch (e) { return null; }
+  }
+  function canShareFile(blob, name) {
+    var f = asFile(blob, name);
+    try { return !!(f && navigator.canShare && navigator.share && navigator.canShare({ files: [f] })); } catch (e) { return false; }
+  }
+  function isTouch() { return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches); }
+  function downloadBlob(blob, name) {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 10000);
+  }
+  function showFallback(blob, name, msg, withButtons) {
     hideFallback();
+    resultBlob = blob; resultName = name || 'photo.jpg';
+    $('#fb-msg').textContent = msg;
     $('#fb-img').src = URL.createObjectURL(blob);
+    $('#fb-actions').hidden = !withButtons;
+    $('#btn-share').hidden = !canShareFile(blob, resultName);
     $('#fallback').hidden = false;
+    try { $('#fallback').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (e) {}
   }
+  $('#btn-share').addEventListener('click', function () {
+    var f = resultBlob && asFile(resultBlob, resultName);
+    if (!f) return;
+    navigator.share({ files: [f] }).then(function () {
+      setStatus('共有画面で「画像を保存」などを選んでください。');
+    }, function (err) {
+      if (err && err.name === 'AbortError') return;
+      setStatus('この端末では共有できませんでした。画像を長押しして保存してください。');
+    });
+  });
+  $('#btn-dl').addEventListener('click', function () {
+    if (!resultBlob) return;
+    downloadBlob(resultBlob, resultName);
+    setStatus('ダウンロードを開始しました。保存されないときは、画像を長押ししてください。');
+  });
 
   /* ---------- 黒板の項目（表示・順番） ---------- */
   var focusKey = '';
@@ -1031,24 +1076,23 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     }).then(function (dl) {
       if (!dl) {
         if (window.claude) throw { code: 'unavailable' };
-        var a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = fileNameFor(p);
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(function () { URL.revokeObjectURL(a.href); }, 10000);
+        if (isTouch()) {
+          // スマホは、ダウンロードが動かないブラウザが多いので、画像を表示して共有・長押しで保存してもらう
+          showFallback(blob, fileNameFor(p), '画像ができました。下の「共有・保存」を押すか、画像を長押しして「写真に追加」などを選んでください。', true);
+          return { status: 'panel' };
+        }
+        downloadBlob(blob, fileNameFor(p));
         return { status: 'saved' };
       }
       return dl.save({ filename: fileNameFor(p), data: blob });
     }).then(function (r) {
-      setStatus(r && r.status === 'saved' ? '保存しました：' + fileNameFor(p) : '書き出しました。');
+      setStatus(r && r.status === 'panel' ? '' : (r && r.status === 'saved' ? '保存しました：' + fileNameFor(p) : '書き出しました。'));
     }).catch(function (err) {
       var code = err && err.code;
       if (code === 'no_blob') setStatus('画像を作成できませんでした。写真が大きすぎる可能性があります。');
       else if (code === 'declined') setStatus('保存をキャンセルしました。');
       else if (code === 'rate_limited') setStatus('保存の確認が開いています。少し待ってからもう一度押してください。');
-      else if (blob) { showFallback(blob); setStatus('保存ボタンが使えないため、画像を表示しました。'); }
+      else if (blob) { showFallback(blob, fileNameFor(p), 'この表示では保存ボタンが使えません。下の画像を長押し（パソコンでは右クリック）して保存してください。', false); setStatus('保存ボタンが使えないため、画像を表示しました。'); }
       else setStatus('画像を作成できませんでした。');
     }).then(function () { saving = false; btn.disabled = false; });
   });
