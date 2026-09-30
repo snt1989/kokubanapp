@@ -1,0 +1,831 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<style>
+:root { color-scheme: light; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { margin: 0; }
+img { max-width: 100%; }
+[hidden] { display: none !important; }
+</style>
+<title>後付け小黒板</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=M+PLUS+Rounded+1c:wght@500;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&display=swap">
+<style>
+/* 構成: 左に写真ステージ(黒板をドラッグして配置)、右に黒板の入力パネル。幅が狭いと縦積み。
+   色: 黒板の緑を軸に、緑みのグレー地。選択枠だけ安全ペンの黄色。 */
+:root {
+  --bg: #e9ece6;
+  --surface: #f6f7f3;
+  --surface-2: #dfe4dc;
+  --ink: #18221c;
+  --ink-2: #4a5a50;
+  --line: #c6cdc1;
+  --accent: #2b6a4d;
+  --accent-ink: #ffffff;
+  --mark: #d9a400;
+  --f-display: "Dela Gothic One", "Zen Kaku Gothic New", sans-serif;
+  --f-body: "Zen Kaku Gothic New", "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif;
+  --f-num: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101612;
+    --surface: #18201b;
+    --surface-2: #202b24;
+    --ink: #e6ece7;
+    --ink-2: #9db0a4;
+    --line: #2f3c34;
+    --accent: #63b98f;
+    --accent-ink: #0c1a13;
+    --mark: #f0c53a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101612;
+  --surface: #18201b;
+  --surface-2: #202b24;
+  --ink: #e6ece7;
+  --ink-2: #9db0a4;
+  --line: #2f3c34;
+  --accent: #63b98f;
+  --accent-ink: #0c1a13;
+  --mark: #f0c53a;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--f-body);
+  font-size: 14px;
+  line-height: 1.6;
+  padding-inline: 16px;
+  padding-block: 16px 40px;
+  -webkit-text-size-adjust: 100%;
+}
+.wrap { max-width: 1180px; margin-inline: auto; display: flex; flex-direction: column; gap: 18px; }
+
+.top { display: flex; align-items: center; gap: 12px 14px; flex-wrap: wrap; }
+.mark { flex: none; width: 44px; height: 30px; }
+h1 { margin: 0; font-family: var(--f-display); font-weight: 400; font-size: 22px; letter-spacing: .02em; line-height: 1.2; }
+.lead { margin: 0; color: var(--ink-2); flex: 1 1 280px; min-width: 0; }
+
+.app { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 24px; align-items: start; }
+@media (max-width: 860px) { .app { grid-template-columns: minmax(0, 1fr); } }
+
+.stage { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+.stage-head { display: flex; justify-content: space-between; align-items: center; gap: 4px 12px; flex-wrap: wrap; }
+.fname { display: flex; align-items: center; gap: 8px; font-weight: 700; min-width: 0; overflow-wrap: anywhere; }
+.dims { font-family: var(--f-num); font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.chip { display: inline-block; font-size: 11px; font-weight: 500; line-height: 1.5; padding: 0 7px; border: 1px solid var(--line); border-radius: 999px; color: var(--ink-2); white-space: nowrap; }
+.chip.warn { border-color: var(--mark); color: var(--ink); }
+
+.canvas-wrap { display: block; background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 10px; }
+.canvas-wrap.over { outline: 2px dashed var(--mark); outline-offset: -6px; }
+#cv { display: block; margin-inline: auto; max-width: 100%; max-height: 72vh; width: auto; height: auto; touch-action: none; border-radius: 2px; }
+#cv:focus-visible { outline: 2px solid var(--mark); outline-offset: 3px; }
+.hint { margin: 0; color: var(--ink-2); font-size: 13px; }
+
+.strip { display: flex; gap: 8px; overflow-x: auto; padding-block: 4px 6px; }
+.th { position: relative; flex: none; width: 92px; }
+.th-main { display: block; position: relative; width: 100%; aspect-ratio: 4 / 3; padding: 0; border: 2px solid transparent; border-radius: 5px; overflow: hidden; background: var(--surface-2); cursor: pointer; }
+.th-main[aria-current="true"] { border-color: var(--accent); }
+.th-main img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.th-no { position: absolute; left: 4px; bottom: 4px; background: rgba(0, 0, 0, .62); color: #fff; font: 700 11px var(--f-num); padding: 0 5px; border-radius: 3px; }
+.th-x { position: absolute; right: 3px; top: 3px; width: 22px; height: 22px; padding: 0; border: 0; border-radius: 50%; background: rgba(0, 0, 0, .62); color: #fff; font-size: 14px; line-height: 22px; cursor: pointer; }
+.th-add { flex: none; width: 92px; aspect-ratio: 4 / 3; border: 1.5px dashed var(--ink-2); border-radius: 5px; background: transparent; color: var(--ink); cursor: pointer; font: inherit; font-size: 12px; line-height: 1.4; padding: 4px; }
+
+.fallback { border: 1px solid var(--line); border-radius: 6px; padding: 12px; background: var(--surface); display: flex; flex-direction: column; gap: 8px; }
+.fallback p { margin: 0; }
+.fallback img { display: block; width: 100%; height: auto; border-radius: 3px; }
+
+.panel { min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+.group { display: flex; flex-direction: column; gap: 10px; padding-top: 16px; border-top: 1px solid var(--line); }
+.group:first-child { border-top: 0; padding-top: 0; }
+.group h2 { margin: 0; font-size: 12px; font-weight: 700; color: var(--ink-2); letter-spacing: .08em; }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.lbl { display: flex; align-items: center; gap: 6px; font-weight: 500; font-size: 13px; }
+input[type="text"], input[type="date"], textarea {
+  width: 100%; min-width: 0; font: inherit; font-size: 16px; color: var(--ink);
+  background: var(--surface); border: 1px solid var(--line); border-radius: 5px; padding: 8px 10px;
+}
+textarea { resize: vertical; }
+input:focus-visible, textarea:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.val { font-family: var(--f-num); font-size: 12px; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+
+.seg { display: flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; font: inherit; font-size: 13px; padding: 8px 6px; border: 0; background: var(--surface); color: var(--ink); cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.sw { width: 12px; height: 12px; border-radius: 2px; border: 1px solid rgba(128, 128, 128, .7); }
+
+.btn { width: 100%; font: inherit; font-weight: 700; font-size: 15px; border-radius: 6px; padding: 12px 16px; cursor: pointer; border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink); }
+.btn.sub { background: transparent; color: var(--ink); border-color: var(--line); font-weight: 500; }
+.btn:disabled { opacity: .5; cursor: default; }
+.status { margin: 0; min-height: 1.6em; font-size: 13px; color: var(--ink-2); }
+.note { margin: 0; color: var(--ink-2); font-size: 12px; max-width: 72ch; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .th-main, .btn, .seg button { transition: background-color .12s, border-color .12s; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <svg class="mark" viewBox="0 0 44 30" aria-hidden="true"><rect x="1" y="1" width="42" height="28" rx="3" fill="#25574a" stroke="#d8d3c4" stroke-width="2"/><path d="M8 10h28M8 16h28M8 22h20" stroke="#f3f3ea" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
+    <h1>後付け小黒板</h1>
+    <p class="lead">撮影済みの写真に、工事用の小黒板をあとから合成して書き出します。写真はこのページの中だけで処理され、外部には送信されません。</p>
+  </header>
+
+  <main class="app">
+    <section class="stage" aria-label="プレビュー">
+      <div class="stage-head">
+        <div class="fname"><span id="fname"></span><span class="chip warn" id="chip-sample" hidden>サンプル</span></div>
+        <div class="dims" id="dims"></div>
+      </div>
+      <div class="canvas-wrap" id="drop">
+        <canvas id="cv" tabindex="0" role="img" aria-label="小黒板を合成した写真のプレビュー。矢印キーで黒板を移動、プラスとマイナスで大きさを変更できます。"></canvas>
+      </div>
+      <p class="hint" id="hint">黒板をドラッグで移動、右下の黄色い角をドラッグで大きさを変更します。写真はここにドロップしても追加できます。</p>
+      <div class="strip" id="strip"></div>
+      <section class="fallback" id="fallback" hidden>
+        <p><strong>この表示では保存ボタンが使えません。</strong>下の画像を長押し（パソコンでは右クリック）して保存してください。</p>
+        <img id="fb-img" alt="黒板を合成した完成画像">
+      </section>
+      <input type="file" id="file" accept="image/*" multiple hidden>
+    </section>
+
+    <aside class="panel" aria-label="黒板の設定">
+      <div class="group">
+        <h2>黒板の内容</h2>
+        <div class="field">
+          <label class="lbl" for="f-kouji">工事名 <span class="chip">全写真で共通</span></label>
+          <textarea id="f-kouji" rows="2" maxlength="80"></textarea>
+        </div>
+        <div class="field">
+          <label class="lbl" for="f-sekou">施工者 <span class="chip">全写真で共通</span></label>
+          <input type="text" id="f-sekou" maxlength="40">
+        </div>
+      </div>
+
+      <div class="group">
+        <h2>この写真だけの項目</h2>
+        <div class="field">
+          <label class="lbl" for="f-kojishu">工種</label>
+          <input type="text" id="f-kojishu" list="kojishu-list" maxlength="30" autocomplete="off">
+          <datalist id="kojishu-list">
+            <option value="土工"></option><option value="鉄筋工"></option><option value="型枠工"></option>
+            <option value="コンクリート工"></option><option value="基礎工"></option><option value="舗装工"></option>
+            <option value="管布設工"></option><option value="仮設工"></option><option value="出来形管理"></option>
+          </datalist>
+        </div>
+        <div class="field">
+          <label class="lbl" for="f-sokuten">測点・箇所</label>
+          <input type="text" id="f-sokuten" maxlength="40">
+        </div>
+        <div class="field">
+          <label class="lbl" for="f-bikou">備考</label>
+          <textarea id="f-bikou" rows="2" maxlength="80"></textarea>
+        </div>
+        <div class="field">
+          <label class="lbl" for="f-date">撮影日</label>
+          <input type="date" id="f-date">
+        </div>
+      </div>
+
+      <div class="group">
+        <h2>黒板の見た目</h2>
+        <div class="field">
+          <span class="lbl" id="l-color">色 <span class="chip">全写真で共通</span></span>
+          <div class="seg" role="group" aria-labelledby="l-color" id="seg-color">
+            <button type="button" data-v="green" aria-pressed="false"><span class="sw" style="background:#25574a"></span>緑</button>
+            <button type="button" data-v="black" aria-pressed="false"><span class="sw" style="background:#202322"></span>黒</button>
+            <button type="button" data-v="white" aria-pressed="false"><span class="sw" style="background:#f6f6f1"></span>白</button>
+          </div>
+        </div>
+        <div class="field">
+          <span class="lbl" id="l-era">日付の表記 <span class="chip">全写真で共通</span></span>
+          <div class="seg" role="group" aria-labelledby="l-era" id="seg-era">
+            <button type="button" data-v="wareki" aria-pressed="false">和暦</button>
+            <button type="button" data-v="seireki" aria-pressed="false">西暦</button>
+          </div>
+        </div>
+        <div class="field">
+          <div class="row"><label class="lbl" for="f-size">大きさ <span class="chip">全写真で共通</span></label><span class="val" id="v-size"></span></div>
+          <input type="range" id="f-size" min="15" max="60" step="1">
+        </div>
+        <div class="field">
+          <span class="lbl" id="l-pos">この写真での位置</span>
+          <div class="seg" role="group" aria-labelledby="l-pos" id="seg-pos">
+            <button type="button" data-c="tl">左上</button>
+            <button type="button" data-c="tr">右上</button>
+            <button type="button" data-c="bl">左下</button>
+            <button type="button" data-c="br">右下</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="group">
+        <button type="button" class="btn" id="btn-save">この写真を保存（JPEG）</button>
+        <button type="button" class="btn sub" id="btn-add">写真を追加</button>
+        <p class="status" id="status" role="status" aria-live="polite"></p>
+        <p class="note">公共工事の提出写真では、撮影後の加工を認めない基準があります。提出先の要領を確認してください。書き出した画像には、元の写真のExif情報（撮影日時・位置情報）は引き継がれません。</p>
+      </div>
+    </aside>
+  </main>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var BOARD_W = 360, BOARD_H = 240, ASPECT = BOARD_H / BOARD_W;
+  var FONT = '"M PLUS Rounded 1c","Hiragino Maru Gothic ProN","Hiragino Sans","Noto Sans JP",sans-serif';
+  var LS_KEY = 'kokuban-shared-v1';
+  var THEMES = {
+    green: { frame: '#d8d3c4', s1: '#25574a', s2: '#183f33', chalk: '#f3f3ea', line: 'rgba(243,243,234,.92)' },
+    black: { frame: '#cfcfc8', s1: '#262928', s2: '#181a19', chalk: '#f3f3ea', line: 'rgba(243,243,234,.92)' },
+    white: { frame: '#7f8782', s1: '#fbfbf7', s2: '#eeeee7', chalk: '#15211a', line: 'rgba(21,33,26,.9)' }
+  };
+
+  function $(s) { return document.querySelector(s); }
+
+  var shared = { kouji: '○○地区 排水路改修工事', sekou: '△△建設株式会社', color: 'green', wareki: true, bw: 0.36 };
+  try {
+    var saved = JSON.parse(localStorage.getItem(LS_KEY) || 'null');
+    if (saved && typeof saved === 'object') {
+      if (typeof saved.kouji === 'string') shared.kouji = saved.kouji;
+      if (typeof saved.sekou === 'string') shared.sekou = saved.sekou;
+      if (THEMES[saved.color]) shared.color = saved.color;
+      if (typeof saved.wareki === 'boolean') shared.wareki = saved.wareki;
+      if (typeof saved.bw === 'number' && saved.bw >= 0.15 && saved.bw <= 0.6) shared.bw = saved.bw;
+    }
+  } catch (e) {}
+  function saveShared() {
+    try { localStorage.setItem(LS_KEY, JSON.stringify(shared)); } catch (e) {}
+  }
+
+  var photos = [], cur = -1, nextId = 1;
+  var cv = $('#cv'), cx = cv.getContext('2d');
+  var downloads = null;
+  var downloadsReady = (window.claude && typeof window.claude.use === 'function')
+    ? window.claude.use('downloads').then(function (d) { downloads = d; return d; }, function () { return null; })
+    : Promise.resolve(null);
+
+  /* ---------- 日付 ---------- */
+  function pad(n) { return String(n).padStart(2, '0'); }
+  function ymd(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  function fmtDate(str) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(str || '');
+    if (!m) return '';
+    var y = +m[1], mo = +m[2], d = +m[3], key = y * 10000 + mo * 100 + d;
+    if (shared.wareki) {
+      var era = '', base = 0;
+      if (key >= 20190501) { era = '令和'; base = 2018; }
+      else if (key >= 19890108) { era = '平成'; base = 1988; }
+      else if (key >= 19261225) { era = '昭和'; base = 1925; }
+      if (era) { var n = y - base; return era + (n === 1 ? '元' : n) + '年' + mo + '月' + d + '日'; }
+    }
+    return y + '年' + mo + '月' + d + '日';
+  }
+
+  /* ---------- Exifの撮影日 ---------- */
+  function readExifDate(file) {
+    return file.slice(0, 262144).arrayBuffer().then(function (buf) {
+      try {
+        var dv = new DataView(buf);
+        if (dv.byteLength < 12 || dv.getUint16(0) !== 0xFFD8) return null;
+        var off = 2;
+        while (off + 4 < dv.byteLength) {
+          var marker = dv.getUint16(off), len = dv.getUint16(off + 2);
+          if (marker === 0xFFE1 && dv.getUint32(off + 4) === 0x45786966) {
+            var tiff = off + 10, le = dv.getUint16(tiff) === 0x4949;
+            var g16 = function (o) { return dv.getUint16(o, le); };
+            var g32 = function (o) { return dv.getUint32(o, le); };
+            var find = function (ifd, tag) {
+              var n = g16(ifd);
+              for (var i = 0; i < n; i++) { var e = ifd + 2 + i * 12; if (g16(e) === tag) return e; }
+              return -1;
+            };
+            var ep = find(tiff + g32(tiff + 4), 0x8769);
+            if (ep < 0) return null;
+            var exif = tiff + g32(ep + 8);
+            var t = find(exif, 0x9003);
+            if (t < 0) t = find(exif, 0x9004);
+            if (t < 0) return null;
+            var so = tiff + g32(t + 8), s = '';
+            for (var k = 0; k < 10; k++) s += String.fromCharCode(dv.getUint8(so + k));
+            var m = /^(\d{4}):(\d{2}):(\d{2})$/.exec(s);
+            return (m && +m[1] >= 1990) ? m[1] + '-' + m[2] + '-' + m[3] : null;
+          }
+          if ((marker & 0xFF00) !== 0xFF00 || marker === 0xFFDA) break;
+          off += 2 + len;
+        }
+      } catch (e) {}
+      return null;
+    }, function () { return null; });
+  }
+
+  /* ---------- 黒板の描画 ---------- */
+  function rr(c, x, y, w, h, r) {
+    c.beginPath();
+    c.moveTo(x + r, y);
+    c.arcTo(x + w, y, x + w, y + h, r);
+    c.arcTo(x + w, y + h, x, y + h, r);
+    c.arcTo(x, y + h, x, y, r);
+    c.arcTo(x, y, x + w, y, r);
+    c.closePath();
+  }
+  function wrapText(c, text, maxW) {
+    var out = [], paras = String(text).split('\n');
+    for (var i = 0; i < paras.length; i++) {
+      var line = '', chars = Array.from(paras[i]);
+      for (var j = 0; j < chars.length; j++) {
+        var t = line + chars[j];
+        if (line && c.measureText(t).width > maxW) { out.push(line); line = chars[j]; } else { line = t; }
+      }
+      out.push(line);
+    }
+    return out;
+  }
+  function fitLines(c, text, weight, maxW, maxH, maxLines, base, min) {
+    for (var s = base; s >= min; s -= 0.5) {
+      c.font = weight + ' ' + s + 'px ' + FONT;
+      var lines = wrapText(c, text, maxW);
+      if (lines.length <= maxLines && lines.length * s * 1.22 <= maxH) return { size: s, lines: lines };
+    }
+    c.font = weight + ' ' + min + 'px ' + FONT;
+    var all = wrapText(c, text, maxW), cut = all.length > maxLines, res = all.slice(0, maxLines);
+    if (cut) {
+      var l = res[res.length - 1];
+      while (l.length > 1 && c.measureText(l + '…').width > maxW) l = l.slice(0, -1);
+      res[res.length - 1] = l + '…';
+    }
+    return { size: min, lines: res };
+  }
+  function rowsFor(p) {
+    return [
+      { label: '工事名', text: shared.kouji, h: 46, n: 2, base: 17 },
+      { label: '工種', text: p.kojishu, h: 30, n: 1, base: 19 },
+      { label: '測点・箇所', text: p.sokuten, h: 30, n: 1, base: 19 },
+      { label: '備考', text: p.bikou, h: 46, n: 2, base: 17 },
+      { label: '撮影日', text: fmtDate(p.date), h: 28, n: 1, base: 18 },
+      { label: '施工者', text: shared.sekou, h: 38, n: 1, base: 19 }
+    ];
+  }
+  function drawBoard(c, x, y, w, rows) {
+    var th = THEMES[shared.color], S = w / BOARD_W;
+    c.save();
+    c.translate(x, y);
+    c.scale(S, S);
+    c.shadowColor = 'rgba(0,0,0,.38)';
+    c.shadowBlur = 9 * S;
+    c.shadowOffsetY = 2 * S;
+    rr(c, 0, 0, BOARD_W, BOARD_H, 5);
+    c.fillStyle = th.frame;
+    c.fill();
+    c.shadowColor = 'transparent';
+    var g = c.createLinearGradient(0, 5, 0, BOARD_H - 5);
+    g.addColorStop(0, th.s1);
+    g.addColorStop(1, th.s2);
+    rr(c, 5, 5, BOARD_W - 10, BOARD_H - 10, 2);
+    c.fillStyle = g;
+    c.fill();
+
+    var gx = 11, gy = 11, gw = BOARD_W - 22, gh = BOARD_H - 22, LW = 68, PAD = 8;
+    c.strokeStyle = th.line;
+    c.lineWidth = 1.6;
+    c.lineJoin = 'round';
+    c.strokeRect(gx, gy, gw, gh);
+    c.textBaseline = 'middle';
+    var cy = gy;
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      if (i > 0) { c.beginPath(); c.moveTo(gx, cy); c.lineTo(gx + gw, cy); c.stroke(); }
+      c.fillStyle = th.chalk;
+      c.globalAlpha = 0.85;
+      c.textAlign = 'center';
+      c.font = '500 12px ' + FONT;
+      c.fillText(r.label, gx + LW / 2, cy + r.h / 2 + 0.5);
+      c.globalAlpha = 1;
+      if (r.text) {
+        var fit = fitLines(c, r.text, 700, gw - LW - PAD * 2, r.h - 6, r.n, r.base, 8);
+        var lh = fit.size * 1.22, top = cy + (r.h - lh * fit.lines.length) / 2;
+        c.textAlign = 'left';
+        c.font = '700 ' + fit.size + 'px ' + FONT;
+        for (var k = 0; k < fit.lines.length; k++) c.fillText(fit.lines[k], gx + LW + PAD, top + lh * k + lh / 2 + 0.5);
+      }
+      cy += r.h;
+    }
+    c.beginPath();
+    c.moveTo(gx + LW, gy);
+    c.lineTo(gx + LW, gy + gh);
+    c.stroke();
+    c.restore();
+  }
+
+  /* ---------- 位置・大きさ ---------- */
+  function effBw(p) { return Math.min(shared.bw, 0.92 * p.ih / (p.iw * ASPECT), 0.7); }
+  function bhFrac(p) { return effBw(p) * p.iw * ASPECT / p.ih; }
+  function clampPos(p) {
+    p.bx = Math.min(Math.max(p.bx, 0), Math.max(0, 1 - effBw(p)));
+    p.by = Math.min(Math.max(p.by, 0), Math.max(0, 1 - bhFrac(p)));
+  }
+  function place(p, corner) {
+    var mx = 0.025, my = 0.025 * p.iw / p.ih;
+    p.bx = corner.indexOf('r') >= 0 ? 1 - effBw(p) - mx : mx;
+    p.by = corner.indexOf('b') >= 0 ? 1 - bhFrac(p) - my : my;
+    clampPos(p);
+  }
+  function geom(p, W, H) {
+    return { x: p.bx * W, y: p.by * H, w: effBw(p) * W, h: bhFrac(p) * H };
+  }
+  function handleAt(g, W, H, k) {
+    return { x: Math.min(g.x + g.w, W - 8 * k), y: Math.min(g.y + g.h, H - 8 * k) };
+  }
+
+  function renderTo(c, W, H, p, k) {
+    clampPos(p);
+    c.clearRect(0, 0, W, H);
+    c.imageSmoothingQuality = 'high';
+    c.drawImage(p.img, 0, 0, W, H);
+    var g = geom(p, W, H);
+    drawBoard(c, g.x, g.y, g.w, rowsFor(p));
+    if (k) {
+      c.save();
+      c.setLineDash([7 * k, 5 * k]);
+      c.lineWidth = 2 * k;
+      c.strokeStyle = '#f0c53a';
+      c.strokeRect(g.x - 2 * k, g.y - 2 * k, g.w + 4 * k, g.h + 4 * k);
+      var h = handleAt(g, W, H, k);
+      c.setLineDash([]);
+      c.fillStyle = '#f0c53a';
+      c.strokeStyle = '#2a2200';
+      c.lineWidth = 1.5 * k;
+      c.fillRect(h.x - 8 * k, h.y - 8 * k, 16 * k, 16 * k);
+      c.strokeRect(h.x - 8 * k, h.y - 8 * k, 16 * k, 16 * k);
+      c.restore();
+    }
+  }
+
+  function textOf(p) {
+    var t = '工事名工種測点・箇所備考撮影日施工者0123456789年月日令和平成昭和元' + shared.kouji + shared.sekou;
+    return t + p.kojishu + p.sokuten + p.bikou + fmtDate(p.date);
+  }
+  function warmFonts(text) {
+    if (!document.fonts || !document.fonts.load) return Promise.resolve();
+    return Promise.all([
+      document.fonts.load('500 14px "M PLUS Rounded 1c"', text),
+      document.fonts.load('700 14px "M PLUS Rounded 1c"', text)
+    ]).then(function () {}, function () {});
+  }
+
+  var raf = 0, warmedFor = '';
+  function requestDraw() {
+    if (raf) return;
+    raf = requestAnimationFrame(function () { raf = 0; draw(); });
+  }
+  function draw() {
+    if (cur < 0) return;
+    var p = photos[cur];
+    var s = Math.min(1, 1600 / Math.max(p.iw, p.ih));
+    var W = Math.round(p.iw * s), H = Math.round(p.ih * s);
+    if (cv.width !== W || cv.height !== H) { cv.width = W; cv.height = H; }
+    var rect = cv.getBoundingClientRect();
+    var k = rect.width ? W / rect.width : 1;
+    renderTo(cx, W, H, p, k);
+    var t = textOf(p);
+    if (t !== warmedFor) { warmedFor = t; warmFonts(t).then(requestDraw); }
+  }
+
+  /* ---------- サンプル画像（配筋の現場をそれらしく描く） ---------- */
+  function makeSample() {
+    var W = 1600, H = 1200, c = document.createElement('canvas');
+    c.width = W; c.height = H;
+    var x = c.getContext('2d'), g, i;
+    g = x.createLinearGradient(0, 0, 0, H * 0.45);
+    g.addColorStop(0, '#8fb8d6'); g.addColorStop(1, '#dbe7ee');
+    x.fillStyle = g; x.fillRect(0, 0, W, H * 0.46);
+    x.fillStyle = '#5f7d5a';
+    for (i = 0; i < 14; i++) {
+      var r = 70 + ((i * 37) % 50);
+      x.beginPath(); x.ellipse(i * 130 + 40, H * 0.43, r * 1.3, r, 0, Math.PI, 0); x.fill();
+    }
+    g = x.createLinearGradient(0, H * 0.43, 0, H);
+    g.addColorStop(0, '#8c7358'); g.addColorStop(1, '#5e4a37');
+    x.fillStyle = g; x.fillRect(0, H * 0.43, W, H * 0.57);
+    x.beginPath(); x.moveTo(330, 520); x.lineTo(1270, 520); x.lineTo(1700, 1200); x.lineTo(-100, 1200); x.closePath();
+    g = x.createLinearGradient(0, 520, 0, 1200);
+    g.addColorStop(0, '#a3a6a1'); g.addColorStop(1, '#7c7f7a');
+    x.fillStyle = g; x.fill();
+    x.fillStyle = '#b98d58';
+    x.beginPath(); x.moveTo(300, 500); x.lineTo(330, 520); x.lineTo(-100, 1200); x.lineTo(-260, 1200); x.closePath(); x.fill();
+    x.beginPath(); x.moveTo(1300, 500); x.lineTo(1270, 520); x.lineTo(1700, 1200); x.lineTo(1860, 1200); x.closePath(); x.fill();
+    var N = 13, M = 9, j;
+    function bar(x1, y1, x2, y2, w) {
+      x.lineCap = 'round';
+      x.strokeStyle = '#4a2f1f'; x.lineWidth = w;
+      x.beginPath(); x.moveTo(x1, y1); x.lineTo(x2, y2); x.stroke();
+      x.strokeStyle = '#94603b'; x.lineWidth = Math.max(1, w * 0.35);
+      x.beginPath(); x.moveTo(x1, y1); x.lineTo(x2, y2); x.stroke();
+    }
+    for (i = 0; i <= N; i++) { var t = i / N; bar(330 + t * 940, 520, -100 + t * 1800, 1200, 6); }
+    for (j = 0; j <= M; j++) {
+      var s = Math.pow(j / M, 1.7), yy = 520 + s * 680;
+      bar(330 - 430 * s, yy, 1270 + 430 * s, yy, 3 + s * 8);
+    }
+    x.fillStyle = '#333'; x.fillRect(1310, 1120, 160, 22);
+    x.fillStyle = '#e8631a'; x.beginPath(); x.moveTo(1390, 930); x.lineTo(1450, 1120); x.lineTo(1330, 1120); x.closePath(); x.fill();
+    x.fillStyle = '#f4f4f0'; x.beginPath(); x.moveTo(1358, 1030); x.lineTo(1422, 1030); x.lineTo(1430, 1058); x.lineTo(1350, 1058); x.closePath(); x.fill();
+    return {
+      id: nextId++, name: 'サンプル画像（配筋）', url: '', thumb: c.toDataURL('image/jpeg', 0.7), img: c, iw: W, ih: H,
+      kojishu: '鉄筋工', sokuten: 'No.12+5.0 底版', bikou: '配筋状況 D13 @200', date: ymd(new Date()),
+      bx: 0, by: 0, sample: true
+    };
+  }
+
+  /* ---------- 写真の追加・切り替え ---------- */
+  function loadPhoto(f) {
+    var url = URL.createObjectURL(f);
+    return new Promise(function (res, rej) {
+      var im = new Image();
+      im.onload = function () { res(im); };
+      im.onerror = function () { rej(new Error('decode')); };
+      im.src = url;
+    }).then(function (img) {
+      return readExifDate(f).then(function (ex) {
+        var p = {
+          id: nextId++, name: f.name, url: url, thumb: url, img: img,
+          iw: img.naturalWidth, ih: img.naturalHeight,
+          kojishu: '', sokuten: '', bikou: '',
+          date: ex || ymd(new Date(f.lastModified || Date.now())),
+          bx: 0, by: 0, sample: false
+        };
+        place(p, 'bl');
+        return p;
+      });
+    }, function (e) { URL.revokeObjectURL(url); throw e; });
+  }
+  function addFiles(fileList) {
+    var list = Array.prototype.filter.call(fileList, function (f) {
+      return /^image\//.test(f.type) || /\.(jpe?g|png|webp|heic|heif)$/i.test(f.name);
+    });
+    if (!list.length) { setStatus('画像ファイル（JPEG・PNGなど）を選んでください。'); return; }
+    setStatus('写真を読み込んでいます…');
+    var added = [], failed = 0;
+    list.reduce(function (chain, f) {
+      return chain.then(function () {
+        return loadPhoto(f).then(function (p) { added.push(p); }, function () { failed++; });
+      });
+    }, Promise.resolve()).then(function () {
+      if (added.length) {
+        photos = photos.filter(function (p) { return !p.sample; }).concat(added);
+        cur = photos.indexOf(added[0]);
+        hideFallback();
+        renderStrip(); syncForm(); requestDraw();
+      }
+      var msg = added.length ? added.length + '枚を追加しました。' : '';
+      if (failed) msg += failed + '枚は読み込めませんでした（HEIC形式はJPEGに変換してください）。';
+      setStatus(msg);
+    });
+  }
+  function select(i) { cur = i; hideFallback(); renderStrip(); syncForm(); requestDraw(); }
+  function removePhoto(i) {
+    var p = photos[i];
+    if (p.url) URL.revokeObjectURL(p.url);
+    photos.splice(i, 1);
+    if (!photos.length) { photos.push(makeSample()); cur = 0; }
+    else if (i < cur) cur--;
+    else if (i === cur) cur = Math.min(i, photos.length - 1);
+    hideFallback(); renderStrip(); syncForm(); requestDraw();
+  }
+
+  /* ---------- 画面の更新 ---------- */
+  function setStatus(t) { $('#status').textContent = t || ''; }
+  function renderStrip() {
+    var box = $('#strip');
+    box.textContent = '';
+    photos.forEach(function (p, i) {
+      var w = document.createElement('div'); w.className = 'th';
+      var b = document.createElement('button'); b.type = 'button'; b.className = 'th-main';
+      b.setAttribute('aria-label', '写真' + (i + 1) + 'を表示' + (p.sample ? '（サンプル）' : ''));
+      if (i === cur) b.setAttribute('aria-current', 'true');
+      var im = document.createElement('img'); im.src = p.thumb; im.alt = '';
+      var n = document.createElement('span'); n.className = 'th-no'; n.textContent = String(i + 1);
+      b.appendChild(im); b.appendChild(n);
+      b.addEventListener('click', function () { select(i); });
+      var x = document.createElement('button'); x.type = 'button'; x.className = 'th-x'; x.textContent = '×';
+      x.setAttribute('aria-label', '写真' + (i + 1) + 'を一覧から外す');
+      x.addEventListener('click', function () { removePhoto(i); });
+      w.appendChild(b); w.appendChild(x); box.appendChild(w);
+    });
+    var add = document.createElement('button'); add.type = 'button'; add.className = 'th-add';
+    add.textContent = '＋ 写真を追加';
+    add.addEventListener('click', function () { $('#file').click(); });
+    box.appendChild(add);
+  }
+  function setPressed(sel, attr, val) {
+    Array.prototype.forEach.call(document.querySelectorAll(sel + ' button'), function (b) {
+      b.setAttribute('aria-pressed', b.getAttribute(attr) === val ? 'true' : 'false');
+    });
+  }
+  function syncForm() {
+    var p = photos[cur];
+    $('#f-kouji').value = shared.kouji;
+    $('#f-sekou').value = shared.sekou;
+    $('#f-kojishu').value = p.kojishu;
+    $('#f-sokuten').value = p.sokuten;
+    $('#f-bikou').value = p.bikou;
+    $('#f-date').value = p.date;
+    $('#f-size').value = Math.round(shared.bw * 100);
+    $('#v-size').textContent = Math.round(shared.bw * 100) + '%';
+    setPressed('#seg-color', 'data-v', shared.color);
+    setPressed('#seg-era', 'data-v', shared.wareki ? 'wareki' : 'seireki');
+    $('#fname').textContent = p.name;
+    $('#dims').textContent = p.iw + ' × ' + p.ih + ' px';
+    $('#chip-sample').hidden = !p.sample;
+    $('#hint').textContent = p.sample
+      ? 'サンプル画像です。写真を追加するとサンプルは消えます。黒板をドラッグで移動、右下の黄色い角で大きさを変更できます。'
+      : '黒板をドラッグで移動、右下の黄色い角をドラッグで大きさを変更します。写真はここにドロップしても追加できます。';
+  }
+  function hideFallback() {
+    $('#fallback').hidden = true;
+    var im = $('#fb-img');
+    if (im.src && im.src.indexOf('blob:') === 0) URL.revokeObjectURL(im.src);
+    im.removeAttribute('src');
+  }
+  function showFallback(blob) {
+    hideFallback();
+    $('#fb-img').src = URL.createObjectURL(blob);
+    $('#fallback').hidden = false;
+  }
+
+  /* ---------- 入力 ---------- */
+  function bind(id, fn) { $(id).addEventListener('input', function (e) { fn(e.target.value); requestDraw(); }); }
+  bind('#f-kouji', function (v) { shared.kouji = v; saveShared(); });
+  bind('#f-sekou', function (v) { shared.sekou = v; saveShared(); });
+  bind('#f-kojishu', function (v) { photos[cur].kojishu = v; });
+  bind('#f-sokuten', function (v) { photos[cur].sokuten = v; });
+  bind('#f-bikou', function (v) { photos[cur].bikou = v; });
+  bind('#f-date', function (v) { photos[cur].date = v; });
+  $('#f-size').addEventListener('input', function (e) {
+    shared.bw = (+e.target.value) / 100;
+    $('#v-size').textContent = e.target.value + '%';
+    saveShared(); requestDraw();
+  });
+  $('#seg-color').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    shared.color = b.getAttribute('data-v'); setPressed('#seg-color', 'data-v', shared.color); saveShared(); requestDraw();
+  });
+  $('#seg-era').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    shared.wareki = b.getAttribute('data-v') === 'wareki'; setPressed('#seg-era', 'data-v', b.getAttribute('data-v')); saveShared(); requestDraw();
+  });
+  $('#seg-pos').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    place(photos[cur], b.getAttribute('data-c')); requestDraw();
+  });
+  $('#file').addEventListener('change', function (e) { addFiles(e.target.files); e.target.value = ''; });
+  $('#btn-add').addEventListener('click', function () { $('#file').click(); });
+
+  var drop = $('#drop');
+  ['dragenter', 'dragover'].forEach(function (ev) {
+    drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('over'); });
+  });
+  ['dragleave', 'drop'].forEach(function (ev) {
+    drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('over'); });
+  });
+  drop.addEventListener('drop', function (e) { if (e.dataTransfer && e.dataTransfer.files.length) addFiles(e.dataTransfer.files); });
+
+  /* ---------- 黒板のドラッグ ---------- */
+  var drag = null;
+  function metrics(e) {
+    var rect = cv.getBoundingClientRect(), W = cv.width, H = cv.height;
+    var fx = (e.clientX - rect.left) / rect.width, fy = (e.clientY - rect.top) / rect.height;
+    return { fx: fx, fy: fy, px: fx * W, py: fy * H, W: W, H: H, k: W / rect.width };
+  }
+  function hit(m, p) {
+    var g = geom(p, m.W, m.H), h = handleAt(g, m.W, m.H, m.k);
+    if (Math.abs(m.px - h.x) <= 18 * m.k && Math.abs(m.py - h.y) <= 18 * m.k) return 'resize';
+    var s = 6 * m.k;
+    if (m.px >= g.x - s && m.px <= g.x + g.w + s && m.py >= g.y - s && m.py <= g.y + g.h + s) return 'move';
+    return '';
+  }
+  cv.addEventListener('pointerdown', function (e) {
+    if (cur < 0) return;
+    var p = photos[cur], m = metrics(e), mode = hit(m, p);
+    if (!mode) return;
+    drag = { mode: mode, dx: m.fx - p.bx, dy: m.fy - p.by };
+    try { cv.setPointerCapture(e.pointerId); } catch (err) {}
+    cv.focus({ preventScroll: true });
+    e.preventDefault();
+  });
+  cv.addEventListener('pointermove', function (e) {
+    var p = photos[cur], m = metrics(e);
+    if (!drag) {
+      var h = hit(m, p);
+      cv.style.cursor = h === 'resize' ? 'nwse-resize' : (h === 'move' ? 'grab' : 'default');
+      return;
+    }
+    if (drag.mode === 'move') {
+      p.bx = m.fx - drag.dx; p.by = m.fy - drag.dy; clampPos(p);
+    } else {
+      var nb = Math.min(Math.max(m.fx - p.bx, 0.15), Math.min(0.6, 1 - p.bx));
+      shared.bw = nb;
+      $('#f-size').value = Math.round(nb * 100);
+      $('#v-size').textContent = Math.round(nb * 100) + '%';
+      clampPos(p);
+    }
+    requestDraw();
+  });
+  function endDrag() { if (drag && drag.mode === 'resize') saveShared(); drag = null; }
+  cv.addEventListener('pointerup', endDrag);
+  cv.addEventListener('pointercancel', endDrag);
+  cv.addEventListener('keydown', function (e) {
+    var p = photos[cur], st = e.shiftKey ? 0.05 : 0.01, used = true;
+    if (e.key === 'ArrowLeft') p.bx -= st;
+    else if (e.key === 'ArrowRight') p.bx += st;
+    else if (e.key === 'ArrowUp') p.by -= st * p.iw / p.ih;
+    else if (e.key === 'ArrowDown') p.by += st * p.iw / p.ih;
+    else if (e.key === '+' || e.key === '=') shared.bw = Math.min(0.6, shared.bw + 0.02);
+    else if (e.key === '-') shared.bw = Math.max(0.15, shared.bw - 0.02);
+    else used = false;
+    if (!used) return;
+    e.preventDefault();
+    clampPos(p);
+    $('#f-size').value = Math.round(shared.bw * 100);
+    $('#v-size').textContent = Math.round(shared.bw * 100) + '%';
+    saveShared(); requestDraw();
+  });
+  if (window.ResizeObserver) new ResizeObserver(requestDraw).observe(cv);
+  window.addEventListener('resize', requestDraw);
+
+  /* ---------- 書き出し ---------- */
+  function fileNameFor(p) {
+    var parts = ['工事写真', p.sokuten || p.kojishu, (p.date || '').replace(/-/g, '')].filter(Boolean);
+    var name = parts.join('_').replace(/[\\\/:*?"<>|\s]+/g, '-').slice(0, 80);
+    return name + '.jpg';
+  }
+  var saving = false;
+  $('#btn-save').addEventListener('click', function () {
+    if (saving || cur < 0) return;
+    saving = true;
+    var btn = $('#btn-save'); btn.disabled = true;
+    var p = photos[cur], blob = null;
+    setStatus('画像を作成しています…');
+    warmFonts(textOf(p)).then(function () {
+      var s = Math.min(1, 4096 / Math.max(p.iw, p.ih));
+      var W = Math.round(p.iw * s), H = Math.round(p.ih * s);
+      var c = document.createElement('canvas'); c.width = W; c.height = H;
+      renderTo(c.getContext('2d'), W, H, p, 0);
+      return new Promise(function (res) { c.toBlob(res, 'image/jpeg', 0.93); });
+    }).then(function (b) {
+      blob = b;
+      if (!blob) throw { code: 'no_blob' };
+      return downloadsReady;
+    }).then(function (dl) {
+      if (!dl) {
+        if (window.claude) throw { code: 'unavailable' };
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = fileNameFor(p);
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(function () { URL.revokeObjectURL(a.href); }, 10000);
+        return { status: 'saved' };
+      }
+      return dl.save({ filename: fileNameFor(p), data: blob });
+    }).then(function (r) {
+      setStatus(r && r.status === 'saved' ? '保存しました：' + fileNameFor(p) : '書き出しました。');
+    }).catch(function (err) {
+      var code = err && err.code;
+      if (code === 'no_blob') setStatus('画像を作成できませんでした。写真が大きすぎる可能性があります。');
+      else if (code === 'declined') setStatus('保存をキャンセルしました。');
+      else if (code === 'rate_limited') setStatus('保存の確認が開いています。少し待ってからもう一度押してください。');
+      else if (blob) { showFallback(blob); setStatus('保存ボタンが使えないため、画像を表示しました。'); }
+      else setStatus('画像を作成できませんでした。');
+    }).then(function () { saving = false; btn.disabled = false; });
+  });
+
+  /* ---------- 起動 ---------- */
+  photos = [makeSample()];
+  cur = 0;
+  place(photos[0], 'bl');
+  renderStrip();
+  syncForm();
+  requestDraw();
+})();
+</script>
+</body>
+</html>
