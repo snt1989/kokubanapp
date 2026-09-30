@@ -184,7 +184,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
           <label class="lbl" for="f-kojishu">工種</label>
           <input type="text" id="f-kojishu" list="kojishu-list" maxlength="30" autocomplete="off">
           <datalist id="kojishu-list">
-            <option value="土工"></option><option value="鉄筋工"></option><option value="型枠工"></option>
+            <option value="クリーニング工"></option><option value="土工"></option><option value="鉄筋工"></option><option value="型枠工"></option>
             <option value="コンクリート工"></option><option value="基礎工"></option><option value="舗装工"></option>
             <option value="管布設工"></option><option value="仮設工"></option><option value="出来形管理"></option>
           </datalist>
@@ -549,7 +549,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     x.fillStyle = '#f4f4f0'; x.beginPath(); x.moveTo(1358, 1030); x.lineTo(1422, 1030); x.lineTo(1430, 1058); x.lineTo(1350, 1058); x.closePath(); x.fill();
     return {
       id: nextId++, name: 'サンプル画像（配筋）', url: '', thumb: c.toDataURL('image/jpeg', 0.7), img: c, iw: W, ih: H,
-      kojishu: '鉄筋工', sokuten: 'No.12+5.0 底版', bikou: '配筋状況 D13 @200', date: ymd(new Date()),
+      kojishu: 'クリーニング工', sokuten: 'No.12+5.0 底版', bikou: '配筋状況 D13 @200', date: ymd(new Date()),
       bx: 0, by: 0, sample: true
     };
   }
