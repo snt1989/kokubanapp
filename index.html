@@ -158,6 +158,62 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .field.off { opacity: .6; }
 .field.off .lbl::after { content: "（黒板に出さない）"; font-weight: 400; font-size: 12px; color: var(--ink-2); }
 
+
+/* 入力欄のたたみ表示（見出しをタップで開閉） */
+.fold { display: block; }
+@media (max-width: 860px) { .fold { padding-top: 4px; } .fold > summary { min-height: 40px; } }
+.fold > summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 44px; }
+.fold > summary::-webkit-details-marker { display: none; }
+.fold > summary h2 { margin: 0; }
+.fold > summary::after { content: "▾"; color: var(--ink-2); font-size: 16px; transition: transform .15s; }
+.fold[open] > summary::after { transform: rotate(180deg); }
+.fold[open] > summary { margin-bottom: 8px; }
+.actionbar { display: flex; flex-direction: column; gap: 8px; }
+
+/* スマホ: プレビューを上に固定、保存ボタンを下に固定して、入力しながら黒板が見えるようにする */
+@media (max-width: 860px) {
+  body { padding-inline: 12px; padding-block: 8px 96px; font-size: 15px; }
+  .wrap { gap: 10px; }
+  .top { gap: 8px; }
+  .mark { width: 34px; height: 24px; }
+  h1 { font-size: 18px; }
+  .lead { display: none; }
+  .app { gap: 12px; }
+  .stage {
+    position: sticky; top: 0; z-index: 5; gap: 6px;
+    margin-inline: -12px; padding: 6px 12px 8px;
+    background: var(--bg); border-bottom: 1px solid var(--line);
+    padding-top: calc(6px + env(safe-area-inset-top, 0px));
+  }
+  .stage-head { flex-wrap: nowrap; }
+  .fname { font-size: 13px; }
+  .dims { display: none; }
+  .canvas-wrap { padding: 4px; }
+  #cv { max-height: 27vh; }
+  .th, .th-add { width: 68px; }
+  .th-add { font-size: 11px; }
+  .strip { padding-block: 0 2px; }
+  .stage-head { min-height: 22px; }
+  #hint { display: none; }
+  .strip { gap: 6px; }
+  /* 入力欄は押しやすい大きさに（iOSは16px未満だと拡大されるため） */
+  .panel input[type="text"], .panel input[type="date"], .panel input[type="password"], .panel textarea, .panel select { font-size: 16px; }
+  .panel input[type="text"], .panel input[type="date"], .panel input[type="password"] { min-height: 46px; }
+  .btn { min-height: 48px; }
+  .seg button { min-height: 44px; }
+  .actionbar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+    flex-direction: row; gap: 8px; align-items: stretch;
+    padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px));
+    background: var(--bg); border-top: 1px solid var(--line);
+  }
+  .actionbar .btn { width: auto; padding-inline: 12px; white-space: nowrap; }
+  .actionbar #btn-save { flex: 1 1 auto; }
+  #status:not(:empty) { position: fixed; left: 12px; right: 12px; bottom: calc(72px + env(safe-area-inset-bottom, 0px)); z-index: 11; margin: 0; padding: 8px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,.15); }
+  .actionbar #btn-add { display: none; } /* 写真の追加は、プレビュー下の「＋ 写真を追加」を使う */
+}
+@media (min-width: 861px) { .fold > summary { cursor: default; } }
+
 @media (prefers-reduced-motion: no-preference) {
   .th-main, .btn, .seg button { transition: background-color .12s, border-color .12s; }
 }
@@ -237,15 +293,15 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
         </div>
       </div>
 
-      <div class="group">
-        <h2>黒板の項目と順番</h2>
+      <details class="group fold" id="fold-rows">
+        <summary><h2>黒板の項目と順番</h2></summary>
         <p class="note">チェックを外した項目は黒板に出ません（入力した内容は残ります）。▲▼で順番を入れ替えます。「共通」は全写真で同じ内容、「写真ごと」は写真ごとに入力します。この設定は全写真で共通です。</p>
         <ul class="rowlist" id="row-list"></ul>
         <button type="button" class="btn sub" id="btn-rows-reset">表示と順番を初期に戻す</button>
-      </div>
+      </details>
 
-      <div class="group">
-        <h2>黒板の見た目</h2>
+      <details class="group fold" id="fold-look">
+        <summary><h2>黒板の見た目</h2></summary>
         <div class="field">
           <span class="lbl" id="l-color">色 <span class="chip">全写真で共通</span></span>
           <div class="seg" role="group" aria-labelledby="l-color" id="seg-color">
@@ -274,12 +330,14 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
             <button type="button" data-c="br">右下</button>
           </div>
         </div>
-      </div>
+      </details>
 
       <div class="group">
-        <button type="button" class="btn" id="btn-save">この写真を保存（JPEG）</button>
-        <button type="button" class="btn sub" id="btn-cam" hidden>カメラで撮影</button>
-        <button type="button" class="btn sub" id="btn-add">写真を追加</button>
+        <div class="actionbar" id="actionbar">
+          <button type="button" class="btn sub" id="btn-cam" hidden>撮影</button>
+          <button type="button" class="btn sub" id="btn-add">写真を追加</button>
+          <button type="button" class="btn" id="btn-save">この写真を保存（JPEG）</button>
+        </div>
         <button type="button" class="btn sub" id="btn-install" hidden>ホーム画面に追加（アプリとして使う）</button>
         <p class="hint" id="install-tip" hidden>iPhone: 画面下の共有ボタン →「ホーム画面に追加」でアプリとして使えます。</p>
         <p class="status" id="status" role="status" aria-live="polite"></p>
@@ -851,7 +909,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     $('#fb-actions').hidden = !withButtons;
     $('#btn-share').hidden = !canShareFile(blob, resultName);
     $('#fallback').hidden = false;
-    try { $('#fallback').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (e) {}
+    try { $('#fallback').scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
   }
   $('#btn-share').addEventListener('click', function () {
     var f = resultBlob && asFile(resultBlob, resultName);
@@ -1007,6 +1065,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   });
   $('#file').addEventListener('change', function (e) { addFiles(e.target.files); e.target.value = ''; });
   $('#btn-add').addEventListener('click', function () { $('#file').click(); });
+  // 広い画面では項目・見た目の設定を開いておく（スマホはたたむ）
+  if (window.matchMedia && window.matchMedia('(min-width: 861px)').matches) {
+    $('#fold-rows').open = true; $('#fold-look').open = true;
+  }
   // カメラ撮影（スマホ・タブレットのみ表示）
   if (isTouch()) $('#btn-cam').hidden = false;
   $('#btn-cam').addEventListener('click', function () { $('#file-cam').click(); });
