@@ -40,6 +40,44 @@
 - 保存した写真のURLは、推測されにくい文字列がついていますが、URLを知っていれば誰でも見られます（公開設定の Blob）。URLの取り扱いに注意してください。
 - `SAVE_KEY` は、コードや README に書かず、Vercel の環境変数にだけ入れてください。
 
+## スマホアプリとして使う
+
+### 1. ホーム画面に追加（PWA・すぐ使える）
+
+Vercel の URL をスマホで開くだけで、アプリのように使えます。費用や審査はありません。
+
+- **Android（Chrome）**: 画面の「ホーム画面に追加（アプリとして使う）」ボタン、またはメニューの「アプリをインストール」
+- **iPhone（Safari）**: 共有ボタン →「ホーム画面に追加」
+- 一度開けばオフラインでも起動します（サーバー保存だけは通信が必要です）。フォントは初回の読み込み後に保存されます
+- スマホには「カメラで撮影」ボタンが出ます。撮ったらそのまま黒板を合成できます
+- 保存は、画面に出る「共有・保存（写真アプリへ）」から写真アプリへ入れます
+
+### 2. ネイティブアプリ（`native/`）
+
+Capacitor で iOS / Android のアプリに包みます。画面は同じ `index.html` を使い、アプリ版では「この写真を保存」で**写真アプリに直接保存**されます（`@capacitor-community/media`）。
+
+**Android（社内配布用 APK）— Mac不要**
+
+1. GitHub の **Actions → Android APK → Run workflow**
+2. 「サーバー保存に使うVercelのURL」に `https://（あなたのドメイン）.vercel.app` を入れる（サーバー保存を使わないなら空）
+3. 終わったら実行結果の **Artifacts → kokuban-android-debug** から `app-debug.apk` をダウンロードし、スマホに入れてインストール（「提供元不明のアプリ」を許可）。Google Play には載せません
+
+**iOS — Mac と Xcode が必要**
+
+```bash
+cd native
+npm install --legacy-peer-deps
+APP_URL=https://（あなたのドメイン）.vercel.app npm run build:web
+npx cap add ios
+npx cap sync ios
+```
+
+1. `native/ios/App/App/Info.plist` に `NSPhotoLibraryAddUsageDescription`（例: 「完成した写真を保存します」）と `NSCameraUsageDescription` を追加
+2. `npx cap open ios` で Xcode を開き、Signing に Apple ID のチームを設定して、実機に入れる
+3. 社内の他の端末へ配るには Apple Developer Program（年額 12,800円）に登録し、TestFlight か Apple Business Manager のカスタムApp配布を使います。無料の Apple ID だと、自分の端末に7日間だけ入れられます
+
+> アプリ版の動作確認はこの環境（Linux）ではできていません。Android と iOS の実機で、撮影・合成・写真アプリへの保存・サーバー保存を確認してください。うまく保存できない場合は、画面に「共有・保存」ボタンが出ます。
+
 ## 注意
 
 - 公共工事の提出写真では、撮影後の加工を認めない基準があります。提出先の要領を確認してください。

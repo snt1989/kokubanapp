@@ -1,0 +1,18 @@
+{
+  "name": "kokuban-native",
+  "private": true,
+  "version": "1.0.0",
+  "scripts": {
+    "build:web": "node build-web.mjs",
+    "sync": "npm run build:web && npx cap sync",
+    "android": "npm run sync && npx cap open android",
+    "ios": "npm run sync && npx cap open ios"
+  },
+  "dependencies": {
+    "@capacitor/android": "latest",
+    "@capacitor/cli": "latest",
+    "@capacitor/core": "latest",
+    "@capacitor/ios": "latest",
+    "@capacitor-community/media": "latest"
+  }
+}

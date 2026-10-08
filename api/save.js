@@ -48,8 +48,19 @@ function monthFolder() {
   return new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' }).slice(0, 7);
 }
 
+// アプリ版（Capacitor）は別のオリジンから呼ぶので、そのオリジンだけ許可する
+const APP_ORIGINS = ['capacitor://localhost', 'https://localhost', 'http://localhost'];
+
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
+  const origin = String(req.headers.origin || '');
+  if (APP_ORIGINS.includes(origin)) {
+    res.setHeader('Access-Control-Allow-Origin', origin);
+    res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'content-type, x-save-key');
+  }
+  if (req.method === 'OPTIONS') return res.status(204).end();
 
   // 画面が「保存先があるか」を調べるための確認用
   if (req.method === 'GET') {

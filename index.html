@@ -13,6 +13,10 @@ img { max-width: 100%; }
 <link rel="icon" href="/favicon.ico" sizes="any">
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="小黒板">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="manifest" href="/manifest.webmanifest">
 <meta name="theme-color" content="#06331f">
 <title>後付け小黒板</title>
@@ -180,6 +184,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
       <p class="hint" id="hint">黒板をドラッグで移動、右下の黄色い角をドラッグで大きさを変更します。写真はここにドロップしても追加できます。</p>
       <div class="strip" id="strip"></div>
       <input type="file" id="file" accept="image/*" multiple hidden>
+      <input type="file" id="file-cam" accept="image/*" capture="environment" hidden>
     </section>
 
     <aside class="panel" aria-label="黒板の設定">
@@ -273,7 +278,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 
       <div class="group">
         <button type="button" class="btn" id="btn-save">この写真を保存（JPEG）</button>
+        <button type="button" class="btn sub" id="btn-cam" hidden>カメラで撮影</button>
         <button type="button" class="btn sub" id="btn-add">写真を追加</button>
+        <button type="button" class="btn sub" id="btn-install" hidden>ホーム画面に追加（アプリとして使う）</button>
+        <p class="hint" id="install-tip" hidden>iPhone: 画面下の共有ボタン →「ホーム画面に追加」でアプリとして使えます。</p>
         <p class="status" id="status" role="status" aria-live="polite"></p>
         <section class="fallback" id="fallback" hidden>
           <p id="fb-msg"></p>
@@ -805,6 +813,26 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     var f = asFile(blob, name);
     try { return !!(f && navigator.canShare && navigator.share && navigator.canShare({ files: [f] })); } catch (e) { return false; }
   }
+  function isNative() {
+    var C = window.Capacitor;
+    try { return !!(C && C.isNativePlatform && C.isNativePlatform()); } catch (e) { return false; }
+  }
+  function nativeMedia() {
+    var C = window.Capacitor;
+    return isNative() && C.Plugins && C.Plugins.Media ? C.Plugins.Media : null;
+  }
+  function saveToPhotos(blob, name) {
+    var M = nativeMedia();
+    if (!M) return Promise.reject({ code: 'no_native' });
+    return new Promise(function (res, rej) {
+      var fr = new FileReader();
+      fr.onload = function () { res(fr.result); };
+      fr.onerror = function () { rej({ code: 'no_native' }); };
+      fr.readAsDataURL(blob);
+    }).then(function (url) {
+      return M.savePhoto({ path: url, fileName: name.replace(/\.jpe?g$/i, '') });
+    });
+  }
   function isTouch() { return !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches); }
   function downloadBlob(blob, name) {
     var a = document.createElement('a');
@@ -979,6 +1007,32 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   });
   $('#file').addEventListener('change', function (e) { addFiles(e.target.files); e.target.value = ''; });
   $('#btn-add').addEventListener('click', function () { $('#file').click(); });
+  // カメラ撮影（スマホ・タブレットのみ表示）
+  if (isTouch()) $('#btn-cam').hidden = false;
+  $('#btn-cam').addEventListener('click', function () { $('#file-cam').click(); });
+  $('#file-cam').addEventListener('change', function (e) { addFiles(e.target.files); e.target.value = ''; });
+
+  // ホーム画面に追加（PWA）
+  var installEv = null;
+  function isStandalone() {
+    return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || window.navigator.standalone === true;
+  }
+  window.addEventListener('beforeinstallprompt', function (e) {
+    e.preventDefault(); installEv = e;
+    if (!isStandalone()) $('#btn-install').hidden = false;
+  });
+  window.addEventListener('appinstalled', function () { installEv = null; $('#btn-install').hidden = true; });
+  $('#btn-install').addEventListener('click', function () {
+    if (!installEv) return;
+    installEv.prompt();
+    installEv.userChoice.then(function () { installEv = null; $('#btn-install').hidden = true; });
+  });
+  if (/iPhone|iPad|iPod/.test(navigator.userAgent) && !isStandalone() && !window.claude && !isNative()) $('#install-tip').hidden = false;
+
+  // オフライン対応（Service Worker）
+  if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol) && !window.claude && !isNative()) {
+    window.addEventListener('load', function () { navigator.serviceWorker.register('/sw.js').catch(function () {}); });
+  }
 
   var drop = $('#drop');
   ['dragenter', 'dragover'].forEach(function (ev) {
@@ -1081,6 +1135,15 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     }).then(function (dl) {
       if (!dl) {
         if (window.claude) throw { code: 'unavailable' };
+        if (nativeMedia()) {
+          // アプリ版: 写真アプリに直接保存。失敗したら共有・長押しの画面に切り替える
+          return saveToPhotos(blob, fileNameFor(p)).then(function () {
+            return { status: 'photos' };
+          }, function () {
+            showFallback(blob, fileNameFor(p), '写真アプリへ直接保存できませんでした。下の「共有・保存」を押すか、画像を長押ししてください。', true);
+            return { status: 'panel' };
+          });
+        }
         if (isTouch()) {
           // スマホは、ダウンロードが動かないブラウザが多いので、画像を表示して共有・長押しで保存してもらう
           showFallback(blob, fileNameFor(p), '画像ができました。下の「共有・保存」を押すか、画像を長押しして「写真に追加」などを選んでください。', true);
@@ -1091,7 +1154,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
       }
       return dl.save({ filename: fileNameFor(p), data: blob });
     }).then(function (r) {
-      setStatus(r && r.status === 'panel' ? '' : (r && r.status === 'saved' ? '保存しました：' + fileNameFor(p) : '書き出しました。'));
+      setStatus(r && r.status === 'panel' ? '' : (r && r.status === 'photos' ? '写真アプリに保存しました：' + fileNameFor(p) : (r && r.status === 'saved' ? '保存しました：' + fileNameFor(p) : '書き出しました。')));
     }).catch(function (err) {
       var code = err && err.code;
       if (code === 'no_blob') setStatus('画像を作成できませんでした。写真が大きすぎる可能性があります。');
@@ -1139,7 +1202,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     return step();
   }
   function postApi(kind, name, key, body, type) {
-    return fetch('/api/save?kind=' + kind + '&name=' + encodeURIComponent(name), {
+    return fetch((window.KOKUBAN_API_BASE || '') + '/api/save?kind=' + kind + '&name=' + encodeURIComponent(name), {
       method: 'POST',
       headers: { 'content-type': type, 'x-save-key': encodeURIComponent(key) },
       body: body
@@ -1152,7 +1215,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   }
   function probeServer() {
     if (window.claude || !/^https?:$/.test(location.protocol) || !window.fetch) return;
-    fetch('/api/save', { cache: 'no-store' }).then(function (r) {
+    fetch((window.KOKUBAN_API_BASE || '') + '/api/save', { cache: 'no-store' }).then(function (r) {
       return r.ok ? r.json() : null;
     }).then(function (j) {
       if (!j || !j.ok) return;
