@@ -250,7 +250,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 
 /* 加工・書き込み（ひとつの画面。写真をできるだけ大きく） */
 .editbtn { min-height: 32px; padding: 0 12px; font: inherit; font-size: 12px; font-weight: 700; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 999px; cursor: pointer; white-space: nowrap; }
-#edit { width: min(1240px, calc(100vw - 16px)); height: min(97vh, 1000px); padding: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font-family: var(--f-body); overflow: hidden; }
+#edit { width: 100vw; max-width: 100vw; height: 100vh; height: 100dvh; max-height: 100dvh; padding: 0; border: 0; border-radius: 0; margin: 0; background: var(--surface); color: var(--ink); font-family: var(--f-body); overflow: hidden; }
 #edit[open] { display: flex; flex-direction: column; }
 #edit::backdrop { background: rgba(0, 0, 0, .6); }
 .ed-head { display: flex; align-items: center; justify-content: space-between; padding: 2px 6px 2px 14px; flex: none; }
@@ -258,9 +258,13 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .ed-tabbar { flex: none; padding: 0 12px 8px; border-bottom: 1px solid var(--line); }
 .ed-tabbar .seg button { min-height: 40px; font-size: 14px; }
 .ed-main { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
-.ed-stage { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; background: #1b1f1c; overflow: hidden; padding: 8px; }
+.ed-stage { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; justify-content: center; background: #1b1f1c; overflow: hidden; padding: 6px; }
 .ed-wrap { position: relative; line-height: 0; }
 #ed-cv { display: block; touch-action: none; }
+.ed-side[hidden] { display: none; }
+.ed-tabbar { display: flex; gap: 8px; align-items: center; }
+.ed-tabbar .seg { flex: 1; }
+.ed-tabbar .panelbtn { flex: none; min-height: 40px; padding: 0 12px; font: inherit; font-size: 13px; font-weight: 700; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; cursor: pointer; white-space: nowrap; }
 .ed-side { flex: none; height: 33%; min-height: 150px; overflow-y: auto; padding: 8px 14px; -webkit-overflow-scrolling: touch; }
 .ed-pane { display: flex; flex-direction: column; gap: 10px; }
 .ed-notice { margin: 0 0 8px; padding: 6px 10px; border-radius: 6px; background: var(--bg); border: 1px solid var(--mark); }
@@ -288,14 +292,14 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .seg button[role="tab"][aria-selected="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
 @media (min-width: 900px) {
   .ed-main { flex-direction: row; }
-  .ed-side { width: 340px; height: auto; flex: none; border-left: 1px solid var(--line); }
+  .ed-side { width: 320px; height: auto; flex: none; border-left: 1px solid var(--line); }
 }
 @media (max-width: 860px) {
-  #edit { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; border-radius: 0; border: 0; }
   .fname { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; display: block; }
   .stage-head { align-items: center; }
   .editbtn { padding: 0 10px; }
   .ed-stage { padding: 4px; }
+  .ed-side { height: 30%; }
 }
 
 @media (prefers-reduced-motion: no-preference) {
@@ -468,7 +472,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   <div class="ed-tabbar"><div class="seg" role="tablist" id="ed-tabs" aria-label="加工の種類">
     <button type="button" role="tab" data-tab="adjust" aria-selected="true">回転・切り抜き・色</button>
     <button type="button" role="tab" data-tab="marks" aria-selected="false">文字・図形</button>
-  </div></div>
+  </div><button type="button" class="panelbtn" id="ed-panel" aria-expanded="true">操作パネル ▾</button></div>
   <div class="ed-main">
     <div class="ed-stage" id="ed-stage">
       <div class="ed-wrap" id="ed-wrap">
@@ -1841,7 +1845,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   function edFit(W, H) {
     var cv2 = $('#ed-cv'), st = $('#ed-stage');
     if (cv2.width !== W || cv2.height !== H) { cv2.width = W; cv2.height = H; }
-    var sc = Math.min((st.clientWidth - 16) / W, (st.clientHeight - 16) / H);   // 画面いっぱいまで大きく（拡大もする）
+    var sc = Math.min((st.clientWidth - 12) / W, (st.clientHeight - 12) / H);   // 画面いっぱいまで大きく（拡大もする）
     if (!(sc > 0)) sc = 1;
     cv2.style.width = Math.max(1, Math.floor(W * sc)) + 'px'; cv2.style.height = Math.max(1, Math.floor(H * sc)) + 'px';
   }
@@ -1910,6 +1914,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     var e0 = p.edit || editDefault();
     ed = { p: p, e: cloneEdit(e0), ratio: 'free', tab: 'adjust', marks: JSON.parse(JSON.stringify(p.marks || [])), marksGeo: geoKey(e0), hist: [], sel: -1, tool: 'select', drag: null, base: null };
     $('#ed-br').value = ed.e.br; $('#ed-ct').value = ed.e.ct; $('#ed-sa').value = ed.e.sa;
+    document.querySelector('.ed-side').hidden = false; $('#ed-panel').setAttribute('aria-expanded', 'true'); $('#ed-panel').textContent = '操作パネル ▾';
     var d = $('#edit'); if (d.showModal) d.showModal(); else d.setAttribute('open', '');
     edSetTab('adjust');
   }
@@ -2162,6 +2167,12 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     });
     $('#btn-edit').addEventListener('click', openEdit);
     $('#ed-x').addEventListener('click', closeEdit);
+    $('#ed-panel').addEventListener('click', function () {   // 操作パネルをたたんで、写真を画面いっぱいにする
+      var side = document.querySelector('.ed-side'), open = side.hidden;
+      side.hidden = !open;
+      this.setAttribute('aria-expanded', String(open)); this.textContent = open ? '操作パネル ▾' : '操作パネル ▴';
+      if (ed) { edRender(); requestAnimationFrame(edRender); }
+    });
     $('#ed-cancel').addEventListener('click', closeEdit);
     $('#edit').addEventListener('close', function () { ed = null; });
     $('#ed-tabs').addEventListener('click', function (ev) { var b = ev.target.closest('button'); if (b && ed && b.getAttribute('data-tab') !== ed.tab) edSetTab(b.getAttribute('data-tab')); });
@@ -2215,9 +2226,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 
   /* ---------- お知らせ（アップデート情報） ---------- */
   // 新しいお知らせは、配列の先頭に追加します（id は増やしていく）。
-  var APP_VERSION = '2026.11.18';
+  var APP_VERSION = '2026.11.19';
   var NEWS_BASE_SEEN = 4;  // 初めて開く端末では、この番号より新しいお知らせだけを「未読」にする
   var NEWS = [
+    { id: 10, date: '2026-11-19', tag: '改善', title: '加工の画面を全画面にしました', body: '「✎ 加工・書き込み」を開くと、画面全体に写真を大きく表示します。右上の「操作パネル」を押すと、操作パネルをたたんで写真をさらに大きくできます（もう一度押すと開きます）。' },
     { id: 9, date: '2026-11-18', tag: '改善', title: '加工と書き込みをひとつの画面にまとめ、写真を大きく表示しました', body: '写真の上の「✎ 加工・書き込み」で、「回転・切り抜き・色」と「文字・図形」を同じ画面で切り替えて使えます。写真は画面いっぱいに大きく表示されます（パソコンでは、右側に操作パネルが並びます）。「適用」を押すまで写真は変わらないので、「キャンセル」で全部取り消せます。' },
     { id: 8, date: '2026-11-17', tag: '新機能', title: '写真に文字・図形を入れられます', body: '写真の上の「✎ 加工・書き込み」の「文字・図形」タブから、次を書き込めます。\n・文字（背景なし／白／黒、大きさ・色を変更）\n・四角、丸、矢印（色・太さ・薄い塗りつぶし）\n置いたあとに動かしたり、大きさを変えたり、削除できます。「1つ戻す」も使えます。\n書き込みは写真ごとに保存され、書き出しやまとめて保存にも反映されます。黒板は書き込みの上に重なります。' },
     { id: 7, date: '2026-11-16', tag: '新機能', title: '写真を加工できるようになりました', body: '写真の上の「✎ 写真を加工」から、次の加工ができます。\n・回転（左・右に90度）\n・トリミング（自由／1:1／4:3／3:4／16:9）\n・明るさ・コントラスト・鮮やかさの調整\n元の写真は残るので、何度でもやり直せます。公共工事の提出写真では、加工を認めない基準があるため、提出先の要領を確認してください。' },
