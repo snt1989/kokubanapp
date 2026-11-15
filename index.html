@@ -248,6 +248,38 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .toast-b { min-height: 36px; padding: 0 12px; font: inherit; font-weight: 700; border: 0; border-radius: 6px; background: var(--mark); color: #18221c; cursor: pointer; }
 .toast-x { width: 32px; height: 36px; border: 0; background: transparent; color: inherit; font-size: 18px; cursor: pointer; }
 
+/* 写真の加工 */
+.editbtn { min-height: 32px; padding: 0 12px; font: inherit; font-size: 12px; font-weight: 700; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 999px; cursor: pointer; white-space: nowrap; }
+.editbtn:disabled { opacity: .5; }
+#edit { width: min(760px, calc(100vw - 24px)); height: min(92vh, 820px); padding: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font-family: var(--f-body); overflow: hidden; }
+#edit[open] { display: flex; flex-direction: column; }
+#edit::backdrop { background: rgba(0, 0, 0, .55); }
+.ed-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 8px 6px 16px; border-bottom: 1px solid var(--line); flex: none; }
+.ed-head h2 { margin: 0; font-size: 16px; }
+.ed-stage { flex: 1 1 auto; min-height: 120px; display: flex; align-items: center; justify-content: center; background: #1b1f1c; overflow: hidden; padding: 10px; }
+.ed-wrap { position: relative; line-height: 0; }
+#ed-cv { display: block; }
+.crop { position: absolute; border: 2px solid #f0c53a; box-shadow: 0 0 0 9999px rgba(0, 0, 0, .55); touch-action: none; cursor: move; box-sizing: border-box; }
+.crop::before, .crop::after { content: ""; position: absolute; pointer-events: none; border: 0 solid rgba(255,255,255,.45); }
+.crop::before { left: 33.3%; right: 33.3%; top: 0; bottom: 0; border-left-width: 1px; border-right-width: 1px; }
+.crop::after { top: 33.3%; bottom: 33.3%; left: 0; right: 0; border-top-width: 1px; border-bottom-width: 1px; }
+.hd { position: absolute; width: 44px; height: 44px; touch-action: none; }
+.hd::after { content: ""; position: absolute; width: 18px; height: 18px; background: #f0c53a; border: 2px solid #2a2200; box-sizing: border-box; border-radius: 3px; }
+.hd[data-h="nw"] { left: -22px; top: -22px; cursor: nwse-resize; } .hd[data-h="nw"]::after { left: 13px; top: 13px; }
+.hd[data-h="ne"] { right: -22px; top: -22px; cursor: nesw-resize; } .hd[data-h="ne"]::after { right: 13px; top: 13px; }
+.hd[data-h="sw"] { left: -22px; bottom: -22px; cursor: nesw-resize; } .hd[data-h="sw"]::after { left: 13px; bottom: 13px; }
+.hd[data-h="se"] { right: -22px; bottom: -22px; cursor: nwse-resize; } .hd[data-h="se"]::after { right: 13px; bottom: 13px; }
+.ed-ctl { flex: none; max-height: 40%; overflow-y: auto; padding: 10px 16px; display: flex; flex-direction: column; gap: 10px; -webkit-overflow-scrolling: touch; }
+.ed-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ed-foot .btn { padding-inline: 6px; white-space: nowrap; }
+.ed-foot { flex: none; display: grid; grid-template-columns: 1fr 1.2fr 1.3fr; gap: 8px; padding: 8px 16px calc(8px + env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--line); }
+@media (max-width: 860px) {
+  #edit { width: 100vw; max-width: 100vw; height: 100dvh; max-height: 100dvh; border-radius: 0; border: 0; }
+  .ed-ctl { max-height: 38%; }
+  .editbtn { min-height: 32px; padding: 0 10px; }
+  .stage-head { gap: 6px; }
+}
+
 @media (prefers-reduced-motion: no-preference) {
   .th-main, .btn, .seg button { transition: background-color .12s, border-color .12s; }
 }
@@ -272,8 +304,9 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   <main class="app">
     <section class="stage" aria-label="プレビュー">
       <div class="stage-head">
-        <div class="fname"><span id="fname"></span><span class="chip warn" id="chip-sample" hidden>サンプル</span></div>
+        <div class="fname"><span id="fname"></span><span class="chip warn" id="chip-sample" hidden>サンプル</span><span class="chip" id="chip-edited" hidden>加工済み</span></div>
         <div class="dims" id="dims"></div>
+        <button type="button" class="editbtn" id="btn-edit">✎ 写真を加工</button>
       </div>
       <div class="canvas-wrap" id="drop">
         <canvas id="cv" tabindex="0" role="img" aria-label="小黒板を合成した写真のプレビュー。矢印キーで黒板を移動、プラスとマイナスで大きさを変更できます。"></canvas>
@@ -406,6 +439,48 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
       </div>
     </aside>
   </main>
+
+
+<dialog id="edit" aria-labelledby="edit-title">
+  <div class="ed-head">
+    <h2 id="edit-title">写真を加工</h2>
+    <button type="button" class="news-x" id="ed-x" aria-label="閉じる（変更を捨てる）">×</button>
+  </div>
+  <div class="ed-stage" id="ed-stage">
+    <div class="ed-wrap" id="ed-wrap">
+      <canvas id="ed-cv"></canvas>
+      <div class="crop" id="crop" hidden>
+        <i class="hd" data-h="nw"></i><i class="hd" data-h="ne"></i><i class="hd" data-h="sw"></i><i class="hd" data-h="se"></i>
+      </div>
+    </div>
+  </div>
+  <div class="ed-ctl">
+    <div class="ed-row">
+      <button type="button" class="btn sub" id="ed-left">⟲ 左に回転</button>
+      <button type="button" class="btn sub" id="ed-right">⟳ 右に回転</button>
+    </div>
+    <div class="field">
+      <span class="lbl" id="l-crop">トリミング</span>
+      <div class="seg" role="group" aria-labelledby="l-crop" id="ed-ratio">
+        <button type="button" data-r="free" aria-pressed="false">自由</button>
+        <button type="button" data-r="1" aria-pressed="false">1:1</button>
+        <button type="button" data-r="1.3333" aria-pressed="false">4:3</button>
+        <button type="button" data-r="0.75" aria-pressed="false">3:4</button>
+        <button type="button" data-r="1.7778" aria-pressed="false">16:9</button>
+      </div>
+      <button type="button" class="btn sub" id="ed-nocrop">トリミングをやめる</button>
+    </div>
+    <div class="field"><div class="row"><label class="lbl" for="ed-br">明るさ</label><span class="val" id="v-br"></span></div><input type="range" id="ed-br" min="-100" max="100" step="1" value="0"></div>
+    <div class="field"><div class="row"><label class="lbl" for="ed-ct">コントラスト</label><span class="val" id="v-ct"></span></div><input type="range" id="ed-ct" min="-100" max="100" step="1" value="0"></div>
+    <div class="field"><div class="row"><label class="lbl" for="ed-sa">鮮やかさ</label><span class="val" id="v-sa"></span></div><input type="range" id="ed-sa" min="-100" max="100" step="1" value="0"></div>
+    <p class="note">公共工事の提出写真では、撮影後の加工（明るさ・色の調整、トリミングなど）を認めない基準があります。提出先の要領を確認してください。</p>
+  </div>
+  <div class="ed-foot">
+    <button type="button" class="btn sub" id="ed-reset">元に戻す</button>
+    <button type="button" class="btn sub" id="ed-cancel">キャンセル</button>
+    <button type="button" class="btn" id="ed-ok">適用</button>
+  </div>
+</dialog>
 
 <dialog id="news" aria-labelledby="news-title">
   <div class="news-head">
@@ -805,10 +880,11 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   /* ---------- 写真の追加・切り替え ---------- */
   function makeThumb(img) {
     try {
-      var s = Math.min(1, 184 / Math.max(img.naturalWidth, img.naturalHeight));
+      var iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+      var s = Math.min(1, 184 / Math.max(iw, ih));
       var c = document.createElement('canvas');
-      c.width = Math.max(1, Math.round(img.naturalWidth * s));
-      c.height = Math.max(1, Math.round(img.naturalHeight * s));
+      c.width = Math.max(1, Math.round(iw * s));
+      c.height = Math.max(1, Math.round(ih * s));
       c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
       return c.toDataURL('image/jpeg', 0.7);
     } catch (e) { return img.src; }
@@ -823,7 +899,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     }).then(function (img) {
       return readExifDate(f).then(function (ex) {
         var p = {
-          id: nextId++, name: f.name, url: url, thumb: makeThumb(img), img: img,
+          id: nextId++, name: f.name, url: url, thumb: makeThumb(img), img: img, orig: img, edit: null,
           iw: img.naturalWidth, ih: img.naturalHeight,
           vals: newVals(ex || ymd(new Date(f.lastModified || Date.now()))),
           bx: 0, by: 0, sample: false
@@ -909,6 +985,8 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     $('#fname').textContent = p.name;
     $('#dims').textContent = p.iw + ' × ' + p.ih + ' px';
     $('#chip-sample').hidden = !p.sample;
+    $('#chip-edited').hidden = !p.edit;
+    $('#btn-edit').disabled = !!p.sample;
     $('#hint').textContent = p.sample
       ? 'サンプル画像です。写真を追加するとサンプルは消えます。黒板をドラッグで移動、右下の黄色い角で大きさを変更できます。'
       : '黒板をドラッグで移動、右下の黄色い角をドラッグで大きさを変更します。写真はここにドロップしても追加できます。';
@@ -1578,11 +1656,207 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   });
 
 
+  /* ---------- 写真の加工（回転・トリミング・明るさ・コントラスト・鮮やかさ） ---------- */
+  // 元の写真は残したまま、加工の設定（p.edit）から表示用の画像（p.img）を作り直す。何度でもやり直せる。
+  function srcSize(src) { return { w: src.naturalWidth || src.width, h: src.naturalHeight || src.height }; }
+  function editDefault() { return { rot: 0, crop: null, br: 0, ct: 0, sa: 0 }; }
+  function editIsDefault(e) { return !e.rot && !e.crop && !e.br && !e.ct && !e.sa; }
+  function cloneEdit(e) { return { rot: e.rot, crop: e.crop ? { x: e.crop.x, y: e.crop.y, w: e.crop.w, h: e.crop.h } : null, br: e.br, ct: e.ct, sa: e.sa }; }
+  function adjustPixels(c, w, h, e) {
+    if (!e.br && !e.ct && !e.sa) return;
+    var d = c.getImageData(0, 0, w, h), px = d.data;
+    var ct2 = e.ct * 1.5, f = (259 * (ct2 + 255)) / (255 * (259 - ct2)), add = e.br * 1.28, lut = new Uint8ClampedArray(256), i;
+    for (i = 0; i < 256; i++) lut[i] = f * (i + add - 128) + 128;
+    var sat = 1 + e.sa / 100;
+    for (i = 0; i < px.length; i += 4) {
+      var r = lut[px[i]], g = lut[px[i + 1]], b = lut[px[i + 2]];
+      if (e.sa) {
+        var gr = 0.299 * r + 0.587 * g + 0.114 * b;
+        r = gr + (r - gr) * sat; g = gr + (g - gr) * sat; b = gr + (b - gr) * sat;
+      }
+      px[i] = r; px[i + 1] = g; px[i + 2] = b;
+    }
+    c.putImageData(d, 0, 0);
+  }
+  // src を回転→（トリミング）→調整して canvas にする。maxSide で大きさの上限、noCrop でトリミングなし（プレビュー用）
+  function renderEdit(src, e, maxSide, noCrop) {
+    var sz = srcSize(src), odd = e.rot % 2 === 1;
+    var s = Math.min(1, maxSide / Math.max(sz.w, sz.h));
+    var dw = sz.w * s, dh = sz.h * s;
+    var RW = odd ? dh : dw, RH = odd ? dw : dh;
+    var cr = (!noCrop && e.crop) ? e.crop : { x: 0, y: 0, w: 1, h: 1 };
+    var cx0 = Math.round(cr.x * RW), cy0 = Math.round(cr.y * RH);
+    var cw = Math.max(1, Math.round(cr.w * RW)), ch = Math.max(1, Math.round(cr.h * RH));
+    var c = document.createElement('canvas'); c.width = cw; c.height = ch;
+    var g = c.getContext('2d');
+    g.imageSmoothingQuality = 'high';
+    g.translate(-cx0, -cy0);
+    if (e.rot === 1) { g.translate(RW, 0); g.rotate(Math.PI / 2); }
+    else if (e.rot === 2) { g.translate(RW, RH); g.rotate(Math.PI); }
+    else if (e.rot === 3) { g.translate(0, RH); g.rotate(-Math.PI / 2); }
+    g.drawImage(src, 0, 0, dw, dh);
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    adjustPixels(g, cw, ch, e);
+    return c;
+  }
+
+  var ed = null, edRaf = 0, edBase = null;   // ed: { p, e, ratio }
+  function edShow() { return $('#edit'); }
+  function edLabels() {
+    ['br', 'ct', 'sa'].forEach(function (k) { $('#v-' + k).textContent = (ed.e[k] > 0 ? '+' : '') + ed.e[k]; });
+    Array.prototype.forEach.call($('#ed-ratio').querySelectorAll('button'), function (b) {
+      b.setAttribute('aria-pressed', String(!!(ed.e.crop && b.getAttribute('data-r') === ed.ratio)));
+    });
+    $('#ed-nocrop').hidden = !ed.e.crop;
+  }
+  // プレビュー（回転と調整だけ。トリミング枠は上に重ねる）
+  function edRender() {
+    if (!ed) return;
+    var st = $('#ed-stage'), maxW = st.clientWidth - 20, maxH = st.clientHeight - 20;
+    var prev = renderEdit(ed.p.orig, ed.e, 1400, true);
+    var sc = Math.min(maxW / prev.width, maxH / prev.height, 1);
+    var cv2 = $('#ed-cv');
+    cv2.width = prev.width; cv2.height = prev.height;
+    cv2.getContext('2d').drawImage(prev, 0, 0);
+    cv2.style.width = Math.max(1, Math.floor(prev.width * sc)) + 'px';
+    cv2.style.height = Math.max(1, Math.floor(prev.height * sc)) + 'px';
+    edDrawCrop(); edLabels();
+  }
+  function edRequest() { if (edRaf) return; edRaf = requestAnimationFrame(function () { edRaf = 0; edRender(); }); }
+  function edDrawCrop() {
+    var el = $('#crop'), c = ed.e.crop, cv2 = $('#ed-cv');
+    el.hidden = !c;
+    if (!c) return;
+    var W = cv2.clientWidth, H = cv2.clientHeight;
+    el.style.left = (c.x * W) + 'px'; el.style.top = (c.y * H) + 'px';
+    el.style.width = (c.w * W) + 'px'; el.style.height = (c.h * H) + 'px';
+  }
+  function openEdit() {
+    if (cur < 0 || photos[cur].sample) { setStatus('写真を追加してから加工できます。'); return; }
+    var p = photos[cur];
+    ed = { p: p, e: p.edit ? cloneEdit(p.edit) : editDefault(), ratio: 'free' };
+    $('#ed-br').value = ed.e.br; $('#ed-ct').value = ed.e.ct; $('#ed-sa').value = ed.e.sa;
+    var d = edShow();
+    if (d.showModal) d.showModal(); else d.setAttribute('open', '');
+    edRender();
+    requestAnimationFrame(edRender);  // 開いた直後の大きさが決まってから描き直す
+  }
+  function closeEdit() {
+    var d = edShow(); if (d.close) d.close(); else d.removeAttribute('open');
+    ed = null;
+  }
+  // 回転: 枠も一緒に回す
+  function rotateBy(dir) {
+    var c = ed.e.crop;
+    if (c) ed.e.crop = dir > 0 ? { x: 1 - c.y - c.h, y: c.x, w: c.h, h: c.w } : { x: c.y, y: 1 - c.x - c.w, w: c.h, h: c.w };
+    ed.e.rot = (ed.e.rot + (dir > 0 ? 1 : 3)) % 4;
+    ed.ratio = 'free';
+    edRender();
+  }
+  function ratioNum() { return ed.ratio === 'free' ? 0 : parseFloat(ed.ratio); }
+  function setRatio(key) {
+    ed.ratio = key;
+    var cv2 = $('#ed-cv'), W = cv2.clientWidth, H = cv2.clientHeight;
+    var c = ed.e.crop || { x: 0, y: 0, w: 1, h: 1 };
+    if (key !== 'free') {
+      var R = parseFloat(key), pw = c.w * W, ph = c.h * H;
+      var nw = Math.min(pw, ph * R), nh = nw / R;
+      var cx = (c.x + c.w / 2) * W, cy = (c.y + c.h / 2) * H;
+      var x = Math.min(Math.max(cx - nw / 2, 0), W - nw), y = Math.min(Math.max(cy - nh / 2, 0), H - nh);
+      c = { x: x / W, y: y / H, w: nw / W, h: nh / H };
+    } else if (!ed.e.crop) {
+      c = { x: 0.1, y: 0.1, w: 0.8, h: 0.8 };
+    }
+    ed.e.crop = c;
+    edDrawCrop(); edLabels();
+  }
+  // 枠のドラッグ（四隅で大きさ、中をドラッグで移動）
+  (function () {
+    var drag = null, MIN = 40;
+    var box = $('#crop');
+    box.addEventListener('pointerdown', function (ev) {
+      if (!ed || !ed.e.crop) return;
+      var h = ev.target.getAttribute && ev.target.getAttribute('data-h');
+      var cv2 = $('#ed-cv'), W = cv2.clientWidth, H = cv2.clientHeight, c = ed.e.crop;
+      drag = { h: h || 'move', sx: ev.clientX, sy: ev.clientY, W: W, H: H,
+               x: c.x * W, y: c.y * H, w: c.w * W, h2: c.h * H, id: ev.pointerId };
+      try { box.setPointerCapture(ev.pointerId); } catch (e) {}
+      ev.preventDefault();
+    });
+    box.addEventListener('pointermove', function (ev) {
+      if (!drag || ev.pointerId !== drag.id) return;
+      var dx = ev.clientX - drag.sx, dy = ev.clientY - drag.sy, W = drag.W, H = drag.H, x, y, w, h;
+      if (drag.h === 'move') {
+        x = Math.min(Math.max(drag.x + dx, 0), W - drag.w); y = Math.min(Math.max(drag.y + dy, 0), H - drag.h2);
+        w = drag.w; h = drag.h2;
+      } else {
+        var sx = drag.h.indexOf('e') >= 0 ? 1 : -1, sy = drag.h.indexOf('s') >= 0 ? 1 : -1;
+        var ax = sx > 0 ? drag.x : drag.x + drag.w, ay = sy > 0 ? drag.y : drag.y + drag.h2;   // 動かさない側の角
+        var mx = (sx > 0 ? drag.x + drag.w : drag.x) + dx, my = (sy > 0 ? drag.y + drag.h2 : drag.y) + dy, R = ratioNum();
+        if (R) {
+          var maxW = Math.min(sx > 0 ? W - ax : ax, R * (sy > 0 ? H - ay : ay));
+          w = Math.max(sx * (mx - ax), R * sy * (my - ay));
+          w = Math.min(Math.max(w, Math.min(MIN, maxW)), maxW); h = w / R;
+        } else {
+          mx = Math.min(Math.max(mx, 0), W); my = Math.min(Math.max(my, 0), H);
+          w = Math.max(MIN, sx * (mx - ax)); h = Math.max(MIN, sy * (my - ay));
+          w = Math.min(w, sx > 0 ? W - ax : ax); h = Math.min(h, sy > 0 ? H - ay : ay);
+        }
+        x = sx > 0 ? ax : ax - w; y = sy > 0 ? ay : ay - h;
+      }
+      ed.e.crop = { x: x / W, y: y / H, w: w / W, h: h / H };
+      edDrawCrop();
+    });
+    function end(ev) { if (drag && ev.pointerId === drag.id) drag = null; }
+    box.addEventListener('pointerup', end); box.addEventListener('pointercancel', end);
+  })();
+  function applyEdit() {
+    var p = ed.p, e = cloneEdit(ed.e);
+    if (e.crop && e.crop.w > 0.995 && e.crop.h > 0.995) e.crop = null;
+    var btn = $('#ed-ok'); btn.disabled = true;
+    setTimeout(function () {   // ボタンの表示が変わってから重い処理をする
+      try {
+        if (editIsDefault(e)) { p.img = p.orig; p.edit = null; }
+        else { p.img = renderEdit(p.orig, e, 100000, false); p.edit = e; }
+        var sz = srcSize(p.img); p.iw = sz.w; p.ih = sz.h;
+        p.thumb = makeThumb(p.img);
+        place(p, 'bl');
+        closeEdit();
+        hideFallback(); renderStrip(); syncForm(); requestDraw();
+        setStatus(p.edit ? '加工を反映しました。元に戻すには、もう一度「写真を加工」→「元に戻す」→「適用」。' : '元の写真に戻しました。');
+      } catch (err) {
+        setStatus('加工できませんでした。写真が大きすぎる可能性があります。');
+      }
+      btn.disabled = false;
+    }, 30);
+  }
+  $('#btn-edit').addEventListener('click', openEdit);
+  $('#ed-x').addEventListener('click', closeEdit);
+  $('#ed-cancel').addEventListener('click', closeEdit);
+  $('#edit').addEventListener('cancel', function () { ed = null; });
+  $('#edit').addEventListener('close', function () { ed = null; });
+  $('#ed-left').addEventListener('click', function () { if (ed) rotateBy(-1); });
+  $('#ed-right').addEventListener('click', function () { if (ed) rotateBy(1); });
+  $('#ed-ratio').addEventListener('click', function (ev) { var b = ev.target.closest('button'); if (b && ed) setRatio(b.getAttribute('data-r')); });
+  $('#ed-nocrop').addEventListener('click', function () { if (ed) { ed.e.crop = null; edDrawCrop(); edLabels(); } });
+  ['br', 'ct', 'sa'].forEach(function (k) {
+    $('#ed-' + k).addEventListener('input', function () { if (!ed) return; ed.e[k] = parseInt(this.value, 10) || 0; edRequest(); });
+  });
+  $('#ed-reset').addEventListener('click', function () {
+    if (!ed) return;
+    ed.e = editDefault(); ed.ratio = 'free';
+    $('#ed-br').value = 0; $('#ed-ct').value = 0; $('#ed-sa').value = 0;
+    edRender();
+  });
+  $('#ed-ok').addEventListener('click', function () { if (ed) applyEdit(); });
+  window.addEventListener('resize', function () { if (ed) edRequest(); });
+
   /* ---------- お知らせ（アップデート情報） ---------- */
   // 新しいお知らせは、配列の先頭に追加します（id は増やしていく）。
-  var APP_VERSION = '2026.11.15';
+  var APP_VERSION = '2026.11.16';
   var NEWS_BASE_SEEN = 4;  // 初めて開く端末では、この番号より新しいお知らせだけを「未読」にする
   var NEWS = [
+    { id: 7, date: '2026-11-16', tag: '新機能', title: '写真を加工できるようになりました', body: '写真の上の「✎ 写真を加工」から、次の加工ができます。\n・回転（左・右に90度）\n・トリミング（自由／1:1／4:3／3:4／16:9）\n・明るさ・コントラスト・鮮やかさの調整\n元の写真は残るので、何度でもやり直せます。公共工事の提出写真では、加工を認めない基準があるため、提出先の要領を確認してください。' },
     { id: 6, date: '2026-11-15', tag: '新機能', title: 'お知らせ画面を追加しました', body: 'アプリの更新内容を、この画面でお知らせします。新しいお知らせがあるときは、ベルのマークに赤い点が付きます。' },
     { id: 5, date: '2026-11-15', tag: '新機能', title: '複数枚をまとめて保存できます', body: '写真が2枚以上あるとき、「全○枚保存」で一度に保存できます。\n・パソコン: ZIPにまとめてダウンロード\n・スマホ: 共有シートから写真アプリへまとめて保存\n「すべての写真をサーバーに保存」も追加しました。' },
     { id: 4, date: '2026-10-08', tag: '改善', title: 'スマホで見やすくしました', body: '写真のプレビューを画面の上に固定し、保存ボタンを画面の下に固定しました。入力しながら黒板の様子を確認できます。項目の設定は、見出しをタップして開きます。' },
