@@ -114,6 +114,8 @@ h1 { margin: 0; font-family: var(--f-display); font-weight: 400; font-size: 22px
 
 .fallback { border: 1px solid var(--line); border-radius: 6px; padding: 12px; background: var(--surface); display: flex; flex-direction: column; gap: 8px; }
 .fallback p { margin: 0; }
+.fb-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.fb-list img { width: 100%; height: auto; border-radius: 3px; display: block; }
 .fb-actions { display: flex; flex-direction: column; gap: 8px; }
 .fallback img { display: block; width: 100%; height: auto; border-radius: 3px; }
 
@@ -209,6 +211,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   }
   .actionbar .btn { width: auto; padding-inline: 12px; white-space: nowrap; }
   .actionbar #btn-save { flex: 1 1 auto; }
+  .actionbar #btn-save-all { flex: none; }
   #status:not(:empty) { position: fixed; left: 12px; right: 12px; bottom: calc(72px + env(safe-area-inset-bottom, 0px)); z-index: 11; margin: 0; padding: 8px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 2px 8px rgba(0,0,0,.15); }
   .actionbar #btn-add { display: none; } /* 写真の追加は、プレビュー下の「＋ 写真を追加」を使う */
 }
@@ -336,6 +339,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
         <div class="actionbar" id="actionbar">
           <button type="button" class="btn sub" id="btn-cam" hidden>撮影</button>
           <button type="button" class="btn sub" id="btn-add">写真を追加</button>
+          <button type="button" class="btn sub" id="btn-save-all" hidden>全部保存</button>
           <button type="button" class="btn" id="btn-save">この写真を保存（JPEG）</button>
         </div>
         <button type="button" class="btn sub" id="btn-install" hidden>ホーム画面に追加（アプリとして使う）</button>
@@ -344,6 +348,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
         <section class="fallback" id="fallback" hidden>
           <p id="fb-msg"></p>
           <img id="fb-img" alt="黒板を合成した完成画像">
+          <div class="fb-list" id="fb-list" hidden></div>
           <div class="fb-actions" id="fb-actions" hidden>
             <button type="button" class="btn" id="btn-share">共有・保存（写真アプリへ）</button>
             <button type="button" class="btn sub" id="btn-dl">ファイルとして保存</button>
@@ -358,6 +363,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
           <input type="password" id="f-key" autocomplete="off" maxlength="100">
         </div>
         <button type="button" class="btn" id="btn-server">サーバーに保存（写真と入力内容）</button>
+        <button type="button" class="btn sub" id="btn-server-all" hidden>すべての写真をサーバーに保存</button>
         <p class="status" id="server-status" role="status" aria-live="polite"></p>
         <p class="note">保存に成功すると、パスワードはこの端末のブラウザに記憶されます。共用の端末では使わないでください。</p>
       </div>
@@ -813,6 +819,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   /* ---------- 画面の更新 ---------- */
   function setStatus(t) { $('#status').textContent = t || ''; }
   function renderStrip() {
+    updateBulk();
     var box = $('#strip');
     box.textContent = '';
     photos.forEach(function (p, i) {
@@ -856,13 +863,16 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
       : '黒板をドラッグで移動、右下の黄色い角をドラッグで大きさを変更します。写真はここにドロップしても追加できます。';
   }
   // 完成画像の表示欄。スマホでは「共有・保存」ボタンと、画像の長押し保存を案内する
-  var resultBlob = null, resultName = '';
+  var resultBlob = null, resultName = '', resultItems = null;  // resultItems: 複数枚のとき [{blob,name}]
   function hideFallback() {
     $('#fallback').hidden = true;
     var im = $('#fb-img');
     if (im.src && im.src.indexOf('blob:') === 0) URL.revokeObjectURL(im.src);
     im.removeAttribute('src');
-    resultBlob = null;
+    var list = $('#fb-list');
+    Array.prototype.forEach.call(list.querySelectorAll('img'), function (x) { if (x.src.indexOf('blob:') === 0) URL.revokeObjectURL(x.src); });
+    list.innerHTML = ''; list.hidden = true; im.hidden = false;
+    resultBlob = null; resultItems = null;
   }
   function asFile(blob, name) {
     try { return new File([blob], name, { type: 'image/jpeg' }); } catch (e) { return null; }
@@ -901,8 +911,34 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     a.remove();
     setTimeout(function () { URL.revokeObjectURL(a.href); }, 10000);
   }
+  // 複数枚: 一覧を表示し、「共有・保存」で全部まとめて共有、「ファイルとして保存」でZIPにする
+  function showFallbackMulti(items, msg) {
+    hideFallback();
+    resultItems = items;
+    $('#fb-msg').textContent = msg;
+    $('#fb-img').hidden = true;
+    var list = $('#fb-list');
+    items.forEach(function (it, i) {
+      var im = document.createElement('img');
+      im.src = URL.createObjectURL(it.blob);
+      im.alt = (i + 1) + '枚目: ' + it.name;
+      list.appendChild(im);
+    });
+    list.hidden = false;
+    $('#fb-actions').hidden = false;
+    var files = items.map(function (it) { return asFile(it.blob, it.name); });
+    var ok = false;
+    try { ok = files.every(Boolean) && !!(navigator.canShare && navigator.share && navigator.canShare({ files: files })); } catch (e) {}
+    $('#btn-share').hidden = !ok;
+    $('#btn-share').textContent = '共有・保存（' + items.length + '枚まとめて写真アプリへ）';
+    $('#btn-dl').textContent = 'ZIPファイルとして保存（' + items.length + '枚）';
+    $('#fallback').hidden = false;
+    try { $('#fallback').scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+  }
   function showFallback(blob, name, msg, withButtons) {
     hideFallback();
+    $('#btn-share').textContent = '共有・保存（写真アプリへ）';
+    $('#btn-dl').textContent = 'ファイルとして保存';
     resultBlob = blob; resultName = name || 'photo.jpg';
     $('#fb-msg').textContent = msg;
     $('#fb-img').src = URL.createObjectURL(blob);
@@ -912,9 +948,11 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     try { $('#fallback').scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
   }
   $('#btn-share').addEventListener('click', function () {
-    var f = resultBlob && asFile(resultBlob, resultName);
-    if (!f) return;
-    navigator.share({ files: [f] }).then(function () {
+    var fs = resultItems
+      ? resultItems.map(function (it) { return asFile(it.blob, it.name); }).filter(Boolean)
+      : [resultBlob && asFile(resultBlob, resultName)].filter(Boolean);
+    if (!fs.length) return;
+    navigator.share({ files: fs }).then(function () {
       setStatus('共有画面で「画像を保存」などを選んでください。');
     }, function (err) {
       if (err && err.name === 'AbortError') return;
@@ -922,6 +960,13 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     });
   });
   $('#btn-dl').addEventListener('click', function () {
+    if (resultItems) {
+      makeZip(resultItems).then(function (z) {
+        downloadBlob(z, zipName(resultItems.length));
+        setStatus('ZIPのダウンロードを開始しました。');
+      });
+      return;
+    }
     if (!resultBlob) return;
     downloadBlob(resultBlob, resultName);
     setStatus('ダウンロードを開始しました。保存されないときは、画像を長押ししてください。');
@@ -1227,10 +1272,127 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     }).then(function () { saving = false; btn.disabled = false; });
   });
 
+
+  /* ---------- 複数枚をまとめて保存 ---------- */
+  var CRC_T = null;
+  function crc32(u8) {
+    if (!CRC_T) {
+      CRC_T = new Uint32Array(256);
+      for (var n = 0; n < 256; n++) { var c = n; for (var k = 0; k < 8; k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1); CRC_T[n] = c >>> 0; }
+    }
+    var crc = 0xFFFFFFFF;
+    for (var i = 0; i < u8.length; i++) crc = CRC_T[(crc ^ u8[i]) & 0xFF] ^ (crc >>> 8);
+    return (crc ^ 0xFFFFFFFF) >>> 0;
+  }
+  function readBuf(blob) {
+    if (blob.arrayBuffer) return blob.arrayBuffer();
+    return new Promise(function (res, rej) {
+      var fr = new FileReader(); fr.onload = function () { res(fr.result); }; fr.onerror = rej; fr.readAsArrayBuffer(blob);
+    });
+  }
+  function zipName(n) {
+    var d = new Date(), z = function (v) { return (v < 10 ? '0' : '') + v; };
+    return '工事写真_' + d.getFullYear() + z(d.getMonth() + 1) + z(d.getDate()) + '-' + z(d.getHours()) + z(d.getMinutes()) + '_' + n + '枚.zip';
+  }
+  // JPEGは圧縮済みなので、無圧縮（store）のZIPにする。ファイル名はUTF-8
+  function makeZip(items) {
+    return Promise.all(items.map(function (it) { return readBuf(it.blob); })).then(function (bufs) {
+      var enc = new TextEncoder(), now = new Date();
+      var dt = ((now.getHours() << 11) | (now.getMinutes() << 5) | (now.getSeconds() >> 1)) & 0xFFFF;
+      var dd = (((now.getFullYear() - 1980) << 9) | ((now.getMonth() + 1) << 5) | now.getDate()) & 0xFFFF;
+      var parts = [], central = [], offset = 0;
+      items.forEach(function (it, i) {
+        var data = new Uint8Array(bufs[i]), name = enc.encode(it.name), crc = crc32(data);
+        var h = new DataView(new ArrayBuffer(30));
+        h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x0800, true); h.setUint16(8, 0, true);
+        h.setUint16(10, dt, true); h.setUint16(12, dd, true); h.setUint32(14, crc, true);
+        h.setUint32(18, data.length, true); h.setUint32(22, data.length, true); h.setUint16(26, name.length, true); h.setUint16(28, 0, true);
+        parts.push(h.buffer, name, data);
+        var c = new DataView(new ArrayBuffer(46));
+        c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint16(8, 0x0800, true); c.setUint16(10, 0, true);
+        c.setUint16(12, dt, true); c.setUint16(14, dd, true); c.setUint32(16, crc, true);
+        c.setUint32(20, data.length, true); c.setUint32(24, data.length, true); c.setUint16(28, name.length, true);
+        c.setUint32(42, offset, true);
+        central.push(c.buffer, name);
+        offset += 30 + name.length + data.length;
+      });
+      var csize = 0;
+      central.forEach(function (x) { csize += x.byteLength !== undefined ? x.byteLength : x.length; });
+      var e = new DataView(new ArrayBuffer(22));
+      e.setUint32(0, 0x06054b50, true); e.setUint16(8, items.length, true); e.setUint16(10, items.length, true);
+      e.setUint32(12, csize, true); e.setUint32(16, offset, true);
+      return new Blob(parts.concat(central, [e.buffer]), { type: 'application/zip' });
+    });
+  }
+  // 同じ名前の写真は _2, _3 … を付けて区別する
+  function uniqueNames(list) {
+    var used = {};
+    return list.map(function (p) {
+      var base = fileNameFor(p).replace(/\.jpg$/i, ''), n = base, i = 1;
+      while (used[n]) n = base + '_' + (++i);
+      used[n] = true;
+      return n + '.jpg';
+    });
+  }
+  function realPhotos() { return photos.filter(function (p) { return !p.sample; }); }
+  function updateBulk() {
+    var n = realPhotos().length, many = n >= 2;
+    $('#btn-save-all').hidden = !many;
+    $('#btn-save-all').textContent = '全' + n + '枚保存';
+    $('#btn-server-all').hidden = !many;
+    $('#btn-server-all').textContent = 'すべての写真（' + n + '枚）をサーバーに保存';
+  }
+  var bulkBusy = false;
+  $('#btn-save-all').addEventListener('click', function () {
+    if (bulkBusy || saving) return;
+    var list = realPhotos(); if (list.length < 2) return;
+    bulkBusy = true;
+    var btn = $('#btn-save-all'), names = uniqueNames(list), items = [], i = 0;
+    btn.disabled = true; $('#btn-save').disabled = true;
+    function next() {
+      if (i >= list.length) return Promise.resolve();
+      var p = list[i], idx = i;
+      setStatus('画像を作成しています…（' + (i + 1) + ' / ' + list.length + '枚）');
+      return warmFonts(textOf(p)).then(function () { return renderBlob(p, 4096, 0.93); }).then(function (b) {
+        if (!b) throw { code: 'no_blob', index: idx };
+        items.push({ blob: b, name: names[idx] }); i++;
+        return new Promise(function (r) { setTimeout(r, 0); }); // 画面を固まらせない
+      }).then(next);
+    }
+    next().then(function () {
+      if (nativeMedia()) {
+        // アプリ版: 写真アプリに順番に直接保存する
+        var k = 0, fail = 0;
+        function save1() {
+          if (k >= items.length) return;
+          setStatus('写真アプリに保存しています…（' + (k + 1) + ' / ' + items.length + '枚）');
+          return saveToPhotos(items[k].blob, items[k].name).catch(function () { fail++; }).then(function () { k++; return save1(); });
+        }
+        return Promise.resolve(save1()).then(function () {
+          if (fail) { showFallbackMulti(items, fail + '枚を写真アプリに直接保存できませんでした。下の「共有・保存」か、画像の長押しで保存してください。'); setStatus(''); }
+          else setStatus('写真アプリに' + items.length + '枚を保存しました。');
+        });
+      }
+      if (isTouch() || window.claude) {
+        // スマホ: 共有シートに全部まとめて渡す（ボタンを押してもらう）。共有できない端末は長押しで1枚ずつ
+        showFallbackMulti(items, items.length + '枚できました。下の「共有・保存」を押すと、まとめて写真アプリに保存できます。できない端末では、画像を1枚ずつ長押ししてください。');
+        setStatus('');
+        return;
+      }
+      return makeZip(items).then(function (z) {
+        downloadBlob(z, zipName(items.length));
+        setStatus(items.length + '枚をZIPにまとめて保存しました。');
+      });
+    }).catch(function (err) {
+      if (err && err.code === 'no_blob') setStatus((err.index + 1) + '枚目の画像を作成できませんでした。写真が大きすぎる可能性があります。');
+      else setStatus('保存できませんでした。もう一度お試しください。');
+    }).then(function () { bulkBusy = false; btn.disabled = false; $('#btn-save').disabled = false; });
+  });
+
   /* ---------- サーバーに保存（Vercel Blob / api/save） ---------- */
   var KEY_LS = 'kokuban-savekey-v1';
   var SERVER_MAX = 4 * 1024 * 1024;
-  var serverBusy = false;
+  var serverBusy = false, serverReady = true;
 
   function serverStatus(text, href) {
     var el = $('#server-status');
@@ -1284,10 +1446,26 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
       $('#grp-server').hidden = false;
       try { $('#f-key').value = localStorage.getItem(KEY_LS) || ''; } catch (e) {}
       if (!j.ready) {
-        $('#btn-server').disabled = true;
+        serverReady = false; $('#btn-server').disabled = true; $('#btn-server-all').disabled = true;
         serverStatus('保存先が未設定です。VercelでBlobの接続と SAVE_KEY の登録をしてから、再デプロイしてください。');
       }
     }).catch(function () {});
+  }
+  function metaFor(p, saved) {
+    return {
+      kouji: getVal(p, 'kouji'), sekou: getVal(p, 'sekou'), kojishu: getVal(p, 'kojishu'), sokuten: getVal(p, 'sokuten'),
+      basho: getVal(p, 'basho'), heya: getVal(p, 'heya'), bikou: getVal(p, 'bikou'), date: getVal(p, 'date'), dateLabel: fmtDate(getVal(p, 'date')),
+      originalName: p.name, color: shared.color, imageUrl: saved.url, imagePathname: saved.pathname
+    };
+  }
+  function serverErrorText(err) {
+    var st = err && err.status, code = err && err.code;
+    if (code === 'too_big') return '画像を4MB以内にできませんでした。';
+    if (code === 'no_blob') return '画像を作成できませんでした。写真が大きすぎる可能性があります。';
+    if (st === 401) return '保存用パスワードが違います。';
+    if (st === 413) return '画像が大きすぎて送れませんでした。';
+    if (st === 503) return err.message || '保存先が未設定です。';
+    return (err && err.status && err.message) || '保存に失敗しました。通信状況を確認してもう一度お試しください。';
   }
   $('#btn-server').addEventListener('click', function () {
     if (serverBusy || cur < 0) return;
@@ -1295,7 +1473,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     if (p.sample) { serverStatus('サンプル画像は保存できません。写真を追加してください。'); return; }
     if (!key) { serverStatus('保存用パスワードを入力してください。'); return; }
     serverBusy = true;
-    var btn = $('#btn-server'); btn.disabled = true;
+    var btn = $('#btn-server'); btn.disabled = true; $('#btn-server-all').disabled = true;
     serverStatus('画像を作成しています…');
     var name = fileNameFor(p), img = null;
     warmFonts(textOf(p)).then(function () {
@@ -1305,30 +1483,53 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
       return postApi('image', name, key, blob, 'application/octet-stream');
     }).then(function (saved) {
       img = saved;
-      var meta = {
-        kouji: getVal(p, 'kouji'), sekou: getVal(p, 'sekou'), kojishu: getVal(p, 'kojishu'), sokuten: getVal(p, 'sokuten'),
-        basho: getVal(p, 'basho'), heya: getVal(p, 'heya'), bikou: getVal(p, 'bikou'), date: getVal(p, 'date'), dateLabel: fmtDate(getVal(p, 'date')),
-        originalName: p.name, color: shared.color, imageUrl: saved.url, imagePathname: saved.pathname
-      };
-      return postApi('meta', name, key, JSON.stringify(meta), 'application/json');
+      return postApi('meta', name, key, JSON.stringify(metaFor(p, saved)), 'application/json');
     }).then(function () {
       try { localStorage.setItem(KEY_LS, key); } catch (e) {}
       serverStatus('保存しました。', img.url);
     }).catch(function (err) {
-      var st = err && err.status, code = err && err.code;
-      if (code === 'too_big') serverStatus('画像を4MB以内にできませんでした。');
-      else if (code === 'no_blob') serverStatus('画像を作成できませんでした。写真が大きすぎる可能性があります。');
-      else if (st === 401) serverStatus('保存用パスワードが違います。');
-      else if (st === 413) serverStatus('画像が大きすぎて送れませんでした。');
-      else if (st === 503) serverStatus((err.message || '保存先が未設定です。'));
-      else if (img) serverStatus('写真は保存しましたが、入力内容の保存に失敗しました。もう一度押すと両方を保存し直します。', img.url);
-      else serverStatus((err && err.status && err.message) || '保存に失敗しました。通信状況を確認してもう一度お試しください。');
-    }).then(function () { serverBusy = false; btn.disabled = false; });
+      if (img && !(err && (err.status === 401 || err.status === 413 || err.status === 503))) serverStatus('写真は保存しましたが、入力内容の保存に失敗しました。もう一度押すと両方を保存し直します。', img.url);
+      else serverStatus(serverErrorText(err));
+    }).then(function () { serverBusy = false; btn.disabled = !serverReady; $('#btn-server-all').disabled = !serverReady; });
+  });
+
+  // すべての写真を順番にサーバーへ。失敗した写真があっても、ほかの写真は保存を続ける
+  $('#btn-server-all').addEventListener('click', function () {
+    if (serverBusy) return;
+    var list = realPhotos(), key = $('#f-key').value;
+    if (list.length < 2) return;
+    if (!key) { serverStatus('保存用パスワードを入力してください。'); return; }
+    serverBusy = true;
+    var btn = $('#btn-server-all'); btn.disabled = true; $('#btn-server').disabled = true;
+    var names = uniqueNames(list), done = 0, fails = [], stop = null, i = 0;
+    function one() {
+      if (i >= list.length || stop) return Promise.resolve();
+      var p = list[i], name = names[i], no = i + 1; i++;
+      serverStatus('保存しています…（' + no + ' / ' + list.length + '枚）');
+      var saved = null;
+      return warmFonts(textOf(p)).then(function () { return jpegUnder(p, SERVER_MAX); }).then(function (blob) {
+        return postApi('image', name, key, blob, 'application/octet-stream');
+      }).then(function (r) {
+        saved = r;
+        return postApi('meta', name, key, JSON.stringify(metaFor(p, r)), 'application/json');
+      }).then(function () { done++; }).catch(function (err) {
+        var st = err && err.status;
+        if (st === 401 || st === 503) { stop = err; return; }  // パスワード違い・未設定は、続けても全部失敗するので止める
+        fails.push(no + '枚目');
+      }).then(one);
+    }
+    one().then(function () {
+      if (stop) { serverStatus(serverErrorText(stop) + (done ? '（' + done + '枚は保存済み）' : '')); return; }
+      if (done) { try { localStorage.setItem(KEY_LS, key); } catch (e) {} }
+      if (!fails.length) serverStatus(done + '枚をすべて保存しました。');
+      else serverStatus(done + '枚を保存しました。保存できなかった写真: ' + fails.join('、') + '。もう一度押すと全部を保存し直します。');
+    }).then(function () { serverBusy = false; btn.disabled = !serverReady; $('#btn-server').disabled = !serverReady; });
   });
 
   /* ---------- 起動 ---------- */
   photos = [makeSample()];
   cur = 0;
+  updateBulk();
   place(photos[0], 'bl');
   renderStrip();
   syncForm();
