@@ -217,6 +217,30 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 }
 @media (min-width: 861px) { .fold > summary { cursor: default; } }
 
+/* お知らせ */
+.newsbtn { margin-left: auto; position: relative; display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 12px; font: inherit; font-size: 13px; font-weight: 700; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 999px; cursor: pointer; }
+.newsdot { position: absolute; top: 4px; right: 6px; min-width: 10px; height: 10px; border-radius: 50%; background: #d64533; border: 2px solid var(--surface); box-sizing: content-box; }
+#news { width: min(560px, calc(100vw - 24px)); max-height: min(80vh, 720px); padding: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font-family: var(--f-body); overflow: hidden; }
+#news[open] { display: flex; flex-direction: column; }
+#news::backdrop { background: rgba(0, 0, 0, .5); }
+.news-head { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.news-head h2 { margin: 0; font-size: 16px; }
+.news-x { width: 40px; height: 40px; font-size: 22px; line-height: 1; border: 0; background: transparent; color: var(--ink); cursor: pointer; border-radius: 50%; }
+.news-body { overflow-y: auto; padding: 4px 16px 8px; -webkit-overflow-scrolling: touch; }
+.news-item { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.news-item:last-child { border-bottom: 0; }
+.news-meta { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink-2); font-family: var(--f-num); }
+.news-tag { font-family: var(--f-body); font-size: 11px; font-weight: 700; padding: 0 7px; border-radius: 999px; border: 1px solid var(--accent); color: var(--accent); }
+.news-tag.fix { border-color: var(--mark); color: var(--ink); }
+.news-new { font-family: var(--f-body); font-size: 11px; font-weight: 700; padding: 0 7px; border-radius: 999px; background: #d64533; color: #fff; }
+.news-item h3 { margin: 4px 0 2px; font-size: 15px; line-height: 1.4; }
+.news-item p { margin: 0; color: var(--ink-2); white-space: pre-line; }
+.news-ver { margin: 0; padding: 8px 16px calc(10px + env(safe-area-inset-bottom, 0px)); font-size: 12px; color: var(--ink-2); border-top: 1px solid var(--line); font-family: var(--f-num); }
+.toast { position: fixed; left: 12px; right: 12px; bottom: calc(76px + env(safe-area-inset-bottom, 0px)); z-index: 20; max-width: 520px; margin-inline: auto; display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 14px; background: var(--ink); color: var(--bg); border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.25); }
+.toast span { flex: 1; }
+.toast-b { min-height: 36px; padding: 0 12px; font: inherit; font-weight: 700; border: 0; border-radius: 6px; background: var(--mark); color: #18221c; cursor: pointer; }
+.toast-x { width: 32px; height: 36px; border: 0; background: transparent; color: inherit; font-size: 18px; cursor: pointer; }
+
 @media (prefers-reduced-motion: no-preference) {
   .th-main, .btn, .seg button { transition: background-color .12s, border-color .12s; }
 }
@@ -227,6 +251,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   <header class="top">
     <svg class="mark" viewBox="0 0 44 30" aria-hidden="true"><rect x="1" y="1" width="42" height="28" rx="3" fill="#25574a" stroke="#d8d3c4" stroke-width="2"/><path d="M8 10h28M8 16h28M8 22h20" stroke="#f3f3ea" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
     <h1>後付け小黒板</h1>
+    <button type="button" class="newsbtn" id="btn-news" aria-haspopup="dialog">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+      <span class="newsbtn-t">お知らせ</span><span class="newsdot" id="news-dot" hidden></span>
+    </button>
     <p class="lead">撮影済みの写真に、工事用の小黒板をあとから合成して書き出します。写真はこのページの中だけで処理されます。「サーバーに保存」を押したときだけ、保存先に送信されます。</p>
   </header>
 
@@ -369,6 +397,20 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
       </div>
     </aside>
   </main>
+
+<dialog id="news" aria-labelledby="news-title">
+  <div class="news-head">
+    <h2 id="news-title">お知らせ</h2>
+    <button type="button" class="news-x" id="news-close" aria-label="閉じる">×</button>
+  </div>
+  <div class="news-body" id="news-list"></div>
+  <p class="news-ver" id="news-ver"></p>
+</dialog>
+<div class="toast" id="toast" role="status" hidden>
+  <span>アプリが更新されました。</span>
+  <button type="button" class="toast-b" id="toast-reload">再読み込み</button>
+  <button type="button" class="toast-x" id="toast-x" aria-label="閉じる">×</button>
+</div>
 </div>
 
 <script>
@@ -1525,6 +1567,59 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
       else serverStatus(done + '枚を保存しました。保存できなかった写真: ' + fails.join('、') + '。もう一度押すと全部を保存し直します。');
     }).then(function () { serverBusy = false; btn.disabled = !serverReady; $('#btn-server').disabled = !serverReady; });
   });
+
+
+  /* ---------- お知らせ（アップデート情報） ---------- */
+  // 新しいお知らせは、配列の先頭に追加します（id は増やしていく）。
+  var APP_VERSION = '2026.11.15';
+  var NEWS_BASE_SEEN = 4;  // 初めて開く端末では、この番号より新しいお知らせだけを「未読」にする
+  var NEWS = [
+    { id: 6, date: '2026-11-15', tag: '新機能', title: 'お知らせ画面を追加しました', body: 'アプリの更新内容を、この画面でお知らせします。新しいお知らせがあるときは、ベルのマークに赤い点が付きます。' },
+    { id: 5, date: '2026-11-15', tag: '新機能', title: '複数枚をまとめて保存できます', body: '写真が2枚以上あるとき、「全○枚保存」で一度に保存できます。\n・パソコン: ZIPにまとめてダウンロード\n・スマホ: 共有シートから写真アプリへまとめて保存\n「すべての写真をサーバーに保存」も追加しました。' },
+    { id: 4, date: '2026-10-08', tag: '改善', title: 'スマホで見やすくしました', body: '写真のプレビューを画面の上に固定し、保存ボタンを画面の下に固定しました。入力しながら黒板の様子を確認できます。項目の設定は、見出しをタップして開きます。' },
+    { id: 3, date: '2026-10-08', tag: '新機能', title: 'アプリとして使えます・カメラで撮影', body: 'ホーム画面に追加すると、アプリのように使えます（オフラインでも起動します）。スマホでは「撮影」ボタンから、その場で撮った写真に黒板を合成できます。' },
+    { id: 2, date: '2026-10-02', tag: '改善', title: 'アプリのアイコンを設定しました', body: 'ブラウザのタブとホーム画面に、黒板のアイコンが表示されます。' },
+    { id: 1, date: '2026-09-30', tag: '修正', title: 'スマホでJPEGを保存できない問題を修正しました', body: '保存後に表示される画面から、「共有・保存（写真アプリへ）」で写真アプリに入れられます。画像を長押ししても保存できます。' }
+  ];
+  var NEWS_KEY = 'kokuban-news-seen-v1';
+  function newsSeen() {
+    try { var v = parseInt(localStorage.getItem(NEWS_KEY), 10); if (!isNaN(v)) return v; } catch (e) {}
+    return NEWS_BASE_SEEN;
+  }
+  function newsLatest() { return NEWS.reduce(function (m, n) { return Math.max(m, n.id); }, 0); }
+  function updateNewsDot() { $('#news-dot').hidden = newsLatest() <= newsSeen(); }
+  function openNews() {
+    var seen = newsSeen(), list = $('#news-list');
+    list.textContent = '';
+    NEWS.forEach(function (n) {
+      var it = document.createElement('article'); it.className = 'news-item';
+      var meta = document.createElement('div'); meta.className = 'news-meta';
+      var d = document.createElement('span'); d.textContent = n.date.replace(/-/g, '/');
+      var t = document.createElement('span'); t.className = 'news-tag' + (n.tag === '修正' ? ' fix' : ''); t.textContent = n.tag;
+      meta.appendChild(d); meta.appendChild(t);
+      if (n.id > seen) { var nw = document.createElement('span'); nw.className = 'news-new'; nw.textContent = 'NEW'; meta.appendChild(nw); }
+      var h = document.createElement('h3'); h.textContent = n.title;
+      var b = document.createElement('p'); b.textContent = n.body;
+      it.appendChild(meta); it.appendChild(h); it.appendChild(b); list.appendChild(it);
+    });
+    $('#news-ver').textContent = 'バージョン ' + APP_VERSION;
+    try { localStorage.setItem(NEWS_KEY, String(newsLatest())); } catch (e) {}
+    updateNewsDot();
+    var dlg = $('#news');
+    if (dlg.showModal) { if (!dlg.open) dlg.showModal(); } else dlg.setAttribute('open', '');
+    list.scrollTop = 0;
+  }
+  $('#btn-news').addEventListener('click', openNews);
+  $('#news-close').addEventListener('click', function () { var d = $('#news'); if (d.close) d.close(); else d.removeAttribute('open'); });
+  $('#news').addEventListener('click', function (e) { if (e.target === this && this.close) this.close(); });  // 外側タップで閉じる
+  updateNewsDot();
+
+  // アプリが更新されたとき（Service Workerが新しくなったとき）の案内
+  if ('serviceWorker' in navigator && navigator.serviceWorker.controller && !window.claude && !isNative()) {
+    navigator.serviceWorker.addEventListener('controllerchange', function () { $('#toast').hidden = false; });
+  }
+  $('#toast-reload').addEventListener('click', function () { location.reload(); });
+  $('#toast-x').addEventListener('click', function () { $('#toast').hidden = true; });
 
   /* ---------- 起動 ---------- */
   photos = [makeSample()];
