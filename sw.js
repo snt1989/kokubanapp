@@ -1,6 +1,6 @@
 // 後付け小黒板: オフライン用の Service Worker
 // 画面を更新してリリースするときは、この番号を上げる（利用者に「アプリが更新されました」と出ます）
-const VER = 'kokuban-v11';
+const VER = 'kokuban-v12';
 const CORE = ['/', '/index.html', '/manifest.webmanifest', '/icon-192.png', '/icon-512.png', '/apple-touch-icon.png', '/favicon.ico'];
 
 self.addEventListener('install', (e) => {

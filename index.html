@@ -235,6 +235,16 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .newsbtn { position: relative; display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 12px; font: inherit; font-size: 13px; font-weight: 700; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 999px; cursor: pointer; }
 .newsdot { position: absolute; top: 4px; right: 6px; min-width: 10px; height: 10px; border-radius: 50%; background: #d64533; border: 2px solid var(--surface); box-sizing: content-box; }
 .banner-b { flex: none; align-self: center; min-height: 32px; padding: 0 10px; border: 1px solid var(--accent); border-radius: 6px; background: transparent; color: inherit; font: inherit; font-size: 12px; cursor: pointer; }
+#pp { width: min(560px, calc(100vw - 24px)); max-height: min(90vh, 780px); padding: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font-family: var(--f-body); overflow: hidden; }
+#pp[open] { display: flex; flex-direction: column; }
+#pp::backdrop { background: rgba(0, 0, 0, .5); }
+.pp-tools { display: flex; gap: 8px; margin-bottom: 8px; } .pp-tools .btn { min-height: 38px; font-size: 14px; }
+.pp-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
+.pp-item { position: relative; display: flex; flex-direction: column; gap: 4px; padding: 4px; border: 2px solid var(--line); border-radius: 8px; background: var(--surface); cursor: pointer; font-size: 11px; line-height: 1.3; }
+.pp-item input { position: absolute; top: 8px; left: 8px; width: 24px; height: 24px; margin: 0; accent-color: var(--accent); }
+.pp-item:has(input:checked) { border-color: var(--accent); background: var(--accent-soft, rgba(46, 125, 87, .12)); }
+.pp-th { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 5px; background: #ccc; display: block; }
+.pp-nm { overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 #map { width: min(520px, calc(100vw - 24px)); max-height: min(88vh, 760px); padding: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font-family: var(--f-body); overflow: hidden; }
 #map[open] { display: flex; flex-direction: column; }
 #map::backdrop { background: rgba(0, 0, 0, .5); }
@@ -469,6 +479,14 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
         </section>
         <p class="note">公共工事の提出写真では、撮影後の加工を認めない基準があります。提出先の要領を確認してください。書き出した画像には、元の写真のExif情報（撮影日時・位置情報）は引き継がれません。</p>
       </div>
+      <div class="group" id="grp-proj" hidden>
+        <h2 id="proj-h">現場管理アプリの案件</h2>
+        <button type="button" class="btn sub" id="btn-proj-load">案件の写真を読み込む</button>
+        <button type="button" class="btn" id="btn-proj-save">この写真を案件に保存</button>
+        <button type="button" class="btn sub" id="btn-proj-all" hidden>すべて案件に保存</button>
+        <p class="status" id="proj-status" role="status" aria-live="polite"></p>
+        <p class="note">黒板を付けた写真は、案件の「写真・ファイル」に新しい写真として追加されます（元の写真は残ります）。</p>
+      </div>
       <div class="group" id="grp-server" hidden>
         <h2>サーバーに保存</h2>
         <div class="field">
@@ -570,6 +588,19 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   <div class="map-foot">
     <button type="button" class="btn sub" id="map-cancel">キャンセル</button>
     <button type="button" class="btn" id="map-ok">入力する</button>
+  </div>
+</dialog>
+
+<dialog id="pp" aria-labelledby="pp-title">
+  <div class="map-head"><h2 id="pp-title">案件の写真を選ぶ</h2></div>
+  <div class="map-body">
+    <p class="map-src" id="pp-msg">読み込んでいます…</p>
+    <div class="pp-tools" id="pp-tools" hidden><button type="button" class="btn sub" id="pp-all">すべて選ぶ</button><button type="button" class="btn sub" id="pp-none">選びなおす</button></div>
+    <div id="pp-list" class="pp-list"></div>
+  </div>
+  <div class="map-foot">
+    <button type="button" class="btn sub" id="pp-cancel">閉じる</button>
+    <button type="button" class="btn" id="pp-ok" disabled>読み込む</button>
   </div>
 </dialog>
 
@@ -993,7 +1024,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
       return readExifDate(f).then(function (ex) {
         var p = {
           id: nextId++, name: f.name, url: url, thumb: makeThumb(img), img: img, orig: img, edit: null,
-          iw: img.naturalWidth, ih: img.naturalHeight,
+          iw: img.naturalWidth, ih: img.naturalHeight, cloud: f.cloud || null,
           vals: newVals(ex || ymd(new Date(f.lastModified || Date.now()))),
           bx: 0, by: 0, sample: false
         };
@@ -1581,6 +1612,8 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     var n = realPhotos().length, many = n >= 2;
     $('#btn-save-all').hidden = !many;
     $('#btn-save-all').textContent = '全' + n + '枚保存';
+    $('#btn-proj-all').hidden = !(many && proj);
+    $('#btn-proj-all').textContent = '全' + n + '枚を案件に保存';
     $('#btn-server-all').hidden = !many;
     $('#btn-server-all').textContent = 'すべての写真（' + n + '枚）をサーバーに保存';
   }
@@ -2280,9 +2313,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 
   /* ---------- お知らせ（アップデート情報） ---------- */
   // 新しいお知らせは、配列の先頭に追加します（id は増やしていく）。
-  var APP_VERSION = '2026.11.24';
+  var APP_VERSION = '2026.11.25';
   var NEWS_BASE_SEEN = 4;  // 初めて開く端末では、この番号より新しいお知らせだけを「未読」にする
   var NEWS = [
+    { id: 16, date: '2026-11-25', tag: '新機能', title: '案件の写真を読み込み、黒板を付けて案件に保存できます', body: '現場管理アプリの案件から開くと、その案件の写真を選んで読み込めます。黒板を付けた写真は「案件に保存」で、案件の「写真・ファイル」に追加されます（元の写真は残ります）。案件に保存する写真は、容量の都合で長辺2000px前後に縮小されます。' },
     { id: 15, date: '2026-11-24', tag: '改善', title: '工種をチェックボックスで選べるようになりました', body: '工種の欄に、クリーニング工・除草工・土工などのチェックボックスを並べました。複数選ぶと「除草工・土工」のように黒板に入ります。候補にないものは、下の入力欄に書けます。' },
     { id: 14, date: '2026-11-23', tag: '改善', title: '工種に「除草工」を追加しました', body: '工種の入力欄で「除草工」を候補から選べます。' },
     { id: 13, date: '2026-11-22', tag: '新機能', title: '案件情報は、どの欄に入れるかを聞いてから入力します', body: '現場アプリから開いたとき、届いた項目の一覧を見ながら、工事名・施工者・工種などの欄ごとに入れる項目を選べます。選んだ組み合わせは覚えるので、次からは確認なしで入れることもできます（「割り当てを直す」でいつでも変更可）。' },
@@ -2373,7 +2407,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   // 入れ子のデータも含めて、受け取った項目の一覧にする（浅い階層のものを優先）
   // c.list = [{label, value}]（画面に出す一覧）／ c.table = 正規化した項目名 → 一覧の番号
   // 親の名前をつなげた形（project.name → projectname）でも登録するので、customer.name と project.name を取り違えない
-  var SKIP_KEYS = ['from', 'source', 'app', 'type'];
+  var SKIP_KEYS = ['from', 'source', 'app', 'type', 'gk', 'api', 'pid'];
   function flattenInfo(obj, c, depth, parent) {
     if (!obj || typeof obj !== 'object' || depth > 3) return;
     if (Array.isArray(obj)) { if (obj.length && depth < 3) flattenInfo(obj[0], c, depth + 1, parent); return; }
@@ -2549,7 +2583,9 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   function projectFromAppUrl(url) {
     if (!url || String(url).indexOf('kokuban:') !== 0) return;
     var parts = splitUrl(url), u = readUrlInfo(parts.search, parts.hash), from = u.obj.from || u.obj.source || u.obj.app || '';
-    receiveProject(u.obj, from ? cleanText(from) : '');
+    var tk = takeTicket(u.obj);
+    var ok = receiveProject(u.obj, from ? cleanText(from) : '');
+    if (tk) { if ($('#map').open) pickerAfterMap = true; else openPicker(); }
   }
   function startNativeLinks() {
     var C = window.Capacitor, A = C && C.Plugins && C.Plugins.App;
@@ -2562,11 +2598,142 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   function startProject() {
     startNativeLinks();
     var u = readUrlInfo(), from = u.obj.from || u.obj.source || u.obj.app || '';
+    var tk = takeTicket(u.obj);
     var ok = receiveProject(u.obj, from ? cleanText(from) : '');
-    if (ok || u.hits) {   // 読み込んだら、リンクの情報部分を消す（再読み込みで二重に入らないように）
+    if (tk) { if ($('#map').open) pickerAfterMap = true; else openPicker(); }
+    if (ok || u.hits || tk) {   // 読み込んだら、リンクの情報部分を消す（再読み込みで二重に入らないように）
       try { history.replaceState(null, '', location.pathname); } catch (e) {}
     }
   }
+
+  /* ---------- 現場管理アプリの案件の写真を読み込む／黒板付きの写真を案件に保存する ---------- */
+  // 現場管理アプリの案件から開くと、リンクに「gk（署名付きチケット）」が付く。チケットがある間だけ、案件の写真の読み込みと保存ができる。
+  var PROJ_LS = 'kokuban-proj-v1', DEFAULT_API = 'https://genbakanri-app.vercel.app';
+  var proj = null;   // {ticket, api, name}
+  try { proj = JSON.parse(sessionStorage.getItem(PROJ_LS)); } catch (e) { proj = null; }
+  if (proj && !proj.ticket) proj = null;
+  function projStatus(t) { $('#proj-status').textContent = t || ''; }
+  function projUi() {
+    $('#grp-proj').hidden = !proj;
+    if (proj && proj.name) $('#proj-h').textContent = '案件：' + proj.name;
+    updateBulk();
+  }
+  function takeTicket(obj) {
+    var gk = obj && obj.gk;
+    if (!gk || typeof gk !== 'string') return false;
+    var api = typeof obj.api === 'string' && /^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)*\.vercel\.app$/i.test(obj.api) ? obj.api : DEFAULT_API;
+    proj = { ticket: gk, api: api, name: '' };
+    try { sessionStorage.setItem(PROJ_LS, JSON.stringify(proj)); } catch (e) {}
+    projUi();
+    return true;
+  }
+  function projApi(body) {
+    body.ticket = proj.ticket;
+    return fetch(proj.api + '/api/config', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) })
+      .then(function (r) { return r.json().catch(function () { return {}; }); })
+      .then(function (j) {
+        if (j && j.ok) return j;
+        var m = j && j.error === 'notconfigured' ? '管理者の設定が必要です（現場管理アプリの SSO_SECRET）' : (j && j.error && j.error !== 'server' ? j.error : '通信に失敗しました');
+        throw new Error(m);
+      }, function () { throw new Error('通信に失敗しました。電波の良いところで、もう一度お試しください'); });
+  }
+  function dataUrlToBlob(u) {
+    var i = u.indexOf(','), bin = atob(u.slice(i + 1)), a = new Uint8Array(bin.length);
+    for (var k = 0; k < bin.length; k++) a[k] = bin.charCodeAt(k);
+    return new Blob([a], { type: (u.slice(5, i).split(';')[0]) || 'image/jpeg' });
+  }
+  var ppFiles = [], ppThumbQ = 0;
+  function openPicker() {
+    if (!proj) return;
+    var dlg = $('#pp'), list = $('#pp-list');
+    list.textContent = ''; $('#pp-tools').hidden = true; $('#pp-ok').disabled = true;
+    $('#pp-msg').textContent = '案件の写真を読み込んでいます…';
+    if (dlg.showModal) { if (!dlg.open) dlg.showModal(); } else dlg.setAttribute('open', '');
+    projApi({ action: 'kokuban-list' }).then(function (j) {
+      ppFiles = j.files || [];
+      if (j.project && j.project.name) { proj.name = j.project.name; try { sessionStorage.setItem(PROJ_LS, JSON.stringify(proj)); } catch (e) {} projUi(); }
+      if (!ppFiles.length) { $('#pp-msg').textContent = 'この案件には、読み込める写真がまだありません。現場管理アプリの案件の「写真・ファイル」に写真を追加してください。'; return; }
+      $('#pp-msg').textContent = '黒板を付けたい写真を選んでください（複数選べます）。';
+      $('#pp-tools').hidden = false;
+      ppFiles.forEach(function (f, i) {
+        var lab = document.createElement('label'); lab.className = 'pp-item';
+        var cb = document.createElement('input'); cb.type = 'checkbox'; cb.value = String(i);
+        var im = document.createElement('img'); im.className = 'pp-th'; im.alt = '';
+        var nm = document.createElement('span'); nm.className = 'pp-nm'; nm.textContent = (f.at ? f.at.slice(5, 10).replace('-', '/') + ' ' : '') + f.name;
+        lab.appendChild(cb); lab.appendChild(im); lab.appendChild(nm); list.appendChild(lab);
+        f.img = im;
+      });
+      ppThumbQ++; loadThumbs(ppThumbQ);
+    }, function (e) { $('#pp-msg').textContent = e.message; });
+  }
+  function loadThumbs(token) {   // 見本の画像を、少しずつ読み込む
+    var i = 0;
+    function next() {
+      if (token !== ppThumbQ || !$('#pp').open || i >= ppFiles.length) return;
+      var f = ppFiles[i++];
+      projApi({ action: 'kokuban-file', id: f.id }).then(function (j) { f.data = j.url; f.img.src = j.url; }, function () {}).then(next);
+    }
+    next(); next();
+  }
+  function ppSync() { $('#pp-ok').disabled = !document.querySelector('#pp-list input:checked'); }
+  $('#pp-list').addEventListener('change', ppSync);
+  $('#pp-all').addEventListener('click', function () { Array.prototype.forEach.call(document.querySelectorAll('#pp-list input'), function (c) { c.checked = true; }); ppSync(); });
+  $('#pp-none').addEventListener('click', function () { Array.prototype.forEach.call(document.querySelectorAll('#pp-list input'), function (c) { c.checked = false; }); ppSync(); });
+  $('#pp-cancel').addEventListener('click', function () { $('#pp').close ? $('#pp').close() : $('#pp').removeAttribute('open'); });
+  $('#pp').addEventListener('close', function () { ppThumbQ++; });
+  $('#pp-ok').addEventListener('click', function () {
+    var sel = Array.prototype.map.call(document.querySelectorAll('#pp-list input:checked'), function (c) { return ppFiles[+c.value]; });
+    if (!sel.length) return;
+    var btn = $('#pp-ok'); btn.disabled = true;
+    var files = [], i = 0;
+    function next() {
+      if (i >= sel.length) return Promise.resolve();
+      var f = sel[i++];
+      $('#pp-msg').textContent = '写真を取り込んでいます…（' + i + ' / ' + sel.length + '枚）';
+      var get = f.data ? Promise.resolve({ url: f.data }) : projApi({ action: 'kokuban-file', id: f.id });
+      return get.then(function (j) {
+        var b = dataUrlToBlob(j.url), nm = /\.(jpe?g|png|webp)$/i.test(f.name) ? f.name : f.name + '.jpg';
+        var file; try { file = new File([b], nm, { type: b.type || 'image/jpeg', lastModified: f.at ? Date.parse(f.at) || Date.now() : Date.now() }); } catch (e) { file = b; file.name = nm; }
+        file.cloud = { id: f.id, name: f.name, folderId: f.folderId || null };
+        files.push(file);
+      }).then(next);
+    }
+    next().then(function () {
+      $('#pp').close ? $('#pp').close() : $('#pp').removeAttribute('open');
+      addFiles(files);
+    }, function (e) { $('#pp-msg').textContent = e.message; btn.disabled = false; });
+  });
+  $('#btn-proj-load').addEventListener('click', openPicker);
+  projUi();
+
+  function randId() { var c = 'abcdefghijklmnopqrstuvwxyz0123456789', s = ''; for (var i = 0; i < 20; i++) s += c.charAt(Math.floor(Math.random() * c.length)); return s; }
+  function blobToDataUrl(b) { return new Promise(function (res, rej) { var r = new FileReader(); r.onload = function () { res(r.result); }; r.onerror = function () { rej(r.error); }; r.readAsDataURL(b); }); }
+  var projBusy = false;
+  function projNameFor(p, fallback) {
+    if (p.cloud && p.cloud.name) return p.cloud.name.replace(/\.[A-Za-z0-9]+$/, '') + '_黒板.jpg';
+    return fallback;
+  }
+  function saveToProject(list) {
+    if (!proj || projBusy || !list.length) return;
+    projBusy = true; $('#btn-proj-save').disabled = true; $('#btn-proj-all').disabled = true;
+    var names = uniqueNames(list), done = 0, fail = 0, msg = '';
+    function next(i) {
+      if (i >= list.length) return Promise.resolve();
+      var p = list[i];
+      projStatus('案件に保存しています…（' + (i + 1) + ' / ' + list.length + '枚）');
+      return warmFonts(textOf(p)).then(function () { return jpegUnder(p, 690000); }).then(blobToDataUrl).then(function (u) {
+        return projApi({ action: 'kokuban-save', uploadId: p.saveId || (p.saveId = randId()), filename: projNameFor(p, names[i]), url: u, folderId: p.cloud ? p.cloud.folderId : null });
+      }).then(function () { done++; p.saveId = null; }, function (e) { fail++; msg = e && e.message ? e.message : '保存できませんでした'; }).then(function () { return next(i + 1); });
+    }
+    next(0).then(function () {
+      projStatus(done ? done + '枚を案件の「写真・ファイル」に保存しました。' + (fail ? fail + '枚は保存できませんでした（' + msg + '）。' : '') : '保存できませんでした：' + msg);
+      projBusy = false; $('#btn-proj-save').disabled = false; $('#btn-proj-all').disabled = false;
+    });
+  }
+  $('#btn-proj-save').addEventListener('click', function () { if (cur >= 0 && !photos[cur].sample) saveToProject([photos[cur]]); else projStatus('写真を読み込んでから保存してください。'); });
+  $('#btn-proj-all').addEventListener('click', function () { saveToProject(realPhotos()); });
+  $('#map').addEventListener('close', function () { if (pickerAfterMap) { pickerAfterMap = false; openPicker(); } });
+  var pickerAfterMap = false;
 
   /* ---------- 起動 ---------- */
   photos = [makeSample()];
