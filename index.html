@@ -2313,7 +2313,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 
   /* ---------- お知らせ（アップデート情報） ---------- */
   // 新しいお知らせは、配列の先頭に追加します（id は増やしていく）。
-  var APP_VERSION = '2026.11.25';
+  var APP_VERSION = '2026.11.26';
   var NEWS_BASE_SEEN = 4;  // 初めて開く端末では、この番号より新しいお知らせだけを「未読」にする
   var NEWS = [
     { id: 16, date: '2026-11-25', tag: '新機能', title: '案件の写真を読み込み、黒板を付けて案件に保存できます', body: '現場管理アプリの案件から開くと、その案件の写真を選んで読み込めます。黒板を付けた写真は「案件に保存」で、案件の「写真・ファイル」に追加されます（元の写真は残ります）。案件に保存する写真は、容量の都合で長辺2000px前後に縮小されます。' },
@@ -2633,7 +2633,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
       .then(function (r) { return r.json().catch(function () { return {}; }); })
       .then(function (j) {
         if (j && j.ok) return j;
-        var m = j && j.error === 'notconfigured' ? '管理者の設定が必要です（現場管理アプリの SSO_SECRET）' : (j && j.error && j.error !== 'server' ? j.error : '通信に失敗しました');
+        var m = j && j.error === 'notconfigured' ? '管理者の設定が必要です（現場管理アプリの SSO_SECRET）' : (j && j.error && j.error !== 'server' ? j.error : (j && j.detail ? 'サーバーのエラー：' + j.detail : '通信に失敗しました'));
         throw new Error(m);
       }, function () { throw new Error('通信に失敗しました。電波の良いところで、もう一度お試しください'); });
   }
@@ -2641,6 +2641,19 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     var i = u.indexOf(','), bin = atob(u.slice(i + 1)), a = new Uint8Array(bin.length);
     for (var k = 0; k < bin.length; k++) a[k] = bin.charCodeAt(k);
     return new Blob([a], { type: (u.slice(5, i).split(';')[0]) || 'image/jpeg' });
+  }
+  function fetchChunked(f) {   // 分割して保存された大きい写真を、順に取り込んで結合する
+    var parts = [], type = 'image/jpeg', k = 0;
+    function one() {
+      if (k >= f.chunks) return Promise.resolve({ blob: new Blob(parts, { type: type }) });
+      return projApi({ action: 'kokuban-file', id: f.id, i: k }).then(function (j) {
+        var bin = atob(j.data), a = new Uint8Array(bin.length);
+        for (var x = 0; x < bin.length; x++) a[x] = bin.charCodeAt(x);
+        parts.push(a); type = j.contentType || type; k++;
+        return one();
+      });
+    }
+    return one();
   }
   var ppFiles = [], ppThumbQ = 0;
   function openPicker() {
@@ -2652,7 +2665,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     projApi({ action: 'kokuban-list' }).then(function (j) {
       ppFiles = j.files || [];
       if (j.project && j.project.name) { proj.name = j.project.name; try { sessionStorage.setItem(PROJ_LS, JSON.stringify(proj)); } catch (e) {} projUi(); }
-      if (!ppFiles.length) { $('#pp-msg').textContent = 'この案件には、読み込める写真がまだありません。現場管理アプリの案件の「写真・ファイル」に写真を追加してください。'; return; }
+      if (!ppFiles.length) { $('#pp-msg').textContent = j.total ? '案件のファイルは' + j.total + '件ありますが、写真（JPEG・PNGなど）はありません。' : 'この案件には、読み込める写真がまだありません。現場管理アプリの案件の「写真・ファイル」に写真を追加してください。'; return; }
       $('#pp-msg').textContent = '黒板を付けたい写真を選んでください（複数選べます）。';
       $('#pp-tools').hidden = false;
       ppFiles.forEach(function (f, i) {
@@ -2671,6 +2684,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     function next() {
       if (token !== ppThumbQ || !$('#pp').open || i >= ppFiles.length) return;
       var f = ppFiles[i++];
+      if (f.chunks) { next(); return; }   // 大きい写真は、見本を出さない（選んだときに取り込む）
       projApi({ action: 'kokuban-file', id: f.id }).then(function (j) { f.data = j.url; f.img.src = j.url; }, function () {}).then(next);
     }
     next(); next();
@@ -2690,9 +2704,9 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
       if (i >= sel.length) return Promise.resolve();
       var f = sel[i++];
       $('#pp-msg').textContent = '写真を取り込んでいます…（' + i + ' / ' + sel.length + '枚）';
-      var get = f.data ? Promise.resolve({ url: f.data }) : projApi({ action: 'kokuban-file', id: f.id });
+      var get = f.data ? Promise.resolve({ url: f.data }) : f.chunks ? fetchChunked(f) : projApi({ action: 'kokuban-file', id: f.id });
       return get.then(function (j) {
-        var b = dataUrlToBlob(j.url), nm = /\.(jpe?g|png|webp)$/i.test(f.name) ? f.name : f.name + '.jpg';
+        var b = j.blob || dataUrlToBlob(j.url), nm = /\.(jpe?g|png|webp)$/i.test(f.name) ? f.name : f.name + '.jpg';
         var file; try { file = new File([b], nm, { type: b.type || 'image/jpeg', lastModified: f.at ? Date.parse(f.at) || Date.now() : Date.now() }); } catch (e) { file = b; file.name = nm; }
         file.cloud = { id: f.id, name: f.name, folderId: f.folderId || null };
         files.push(file);
