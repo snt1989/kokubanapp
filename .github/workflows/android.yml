@@ -31,6 +31,8 @@ jobs:
           APP_URL: ${{ inputs.app_url }}
       - run: npx cap add android
       - run: npx cap sync android
+      - name: 現場アプリから開けるようにする（kokuban:// リンク）
+        run: python3 ../native/tools/android_scheme.py
       - name: アプリ名とアイコンを設定
         run: python3 ../native/tools/android_icons.py
       - run: ./gradlew assembleDebug

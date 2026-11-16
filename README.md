@@ -75,7 +75,7 @@ npx cap add ios
 npx cap sync ios
 ```
 
-1. `native/ios/App/App/Info.plist` に `NSPhotoLibraryAddUsageDescription`（例: 「完成した写真を保存します」）と `NSCameraUsageDescription` を追加
+1. `python3 tools/ios_setup.py` を実行して、`Info.plist` に写真・カメラの使用目的と `kokuban://` のURLスキームを追加（`native` フォルダで）
 2. `npx cap open ios` で Xcode を開き、Signing に Apple ID のチームを設定して、実機に入れる
 3. 社内の他の端末へ配るには Apple Developer Program（年額 12,800円）に登録し、TestFlight か Apple Business Manager のカスタムApp配布を使います。無料の Apple ID だと、自分の端末に7日間だけ入れられます
 
@@ -141,7 +141,22 @@ window.addEventListener('message', (e) => {
 - 1項目あたり200文字まで。文字として扱うので、HTMLなどは実行されません
 - 読み込んだあと、リンクの情報部分（`?…`）は消します。再読み込みしても二重に入りません
 - 案件情報を使わずに開いたときは、前回の入力内容がそのまま残ります
-- アプリ版（Capacitor）への受け渡しは、まだ対応していません（Webのリンクから開く場合のみ）
+
+**4. アプリ版（Android / iPhone のアプリ）を開く**
+
+ネイティブ版の黒板アプリは、独自のリンク `kokuban://` で呼び出せます。つなぐ項目は、上の1〜2と同じです。
+
+```
+kokuban://open?工事名=南町マンション大規模修繕&施工者=株式会社三桜&場所=共用廊下
+kokuban://open?project=（JSONをURLエンコードしたもの）
+```
+
+- 黒板アプリが閉じているときは、起動と同時に入力されます。すでに開いているときも受け取ります
+- 現場アプリが Web（ブラウザ／ホーム画面のアプリ）なら、`location.href = 'kokuban://open?…'` で開けます。現場アプリが Capacitor 製なら `@capacitor/app-launcher` の `AppLauncher.openUrl({ url })` を使います
+- 黒板アプリが入っていない端末では、リンクを開いても何も起きません。その場合に備えて、現場アプリ側で Web 版のリンク（上の1〜2）に切り替えるなどの用意をしてください
+- 設定は、Android は Actions のビルドで自動的に入ります（`native/tools/android_scheme.py`）。iPhone は、Mac で `npx cap add ios` のあとに `python3 tools/ios_setup.py` を実行します（`kokuban` のURLスキームと、写真・カメラの使用目的を `Info.plist` に追加します）
+- 現場アプリから開けるのは、`kokuban://` を知っているアプリだけで、他のアプリのリンクには反応しません（`kokuban:` で始まるリンクだけを読みます）
+- Web のURL（`https://…`）で直接アプリ版を開く方式（Universal Links / App Links）は、ドメインの確認ファイルが必要なので、まだ対応していません
 
 ## 注意
 
