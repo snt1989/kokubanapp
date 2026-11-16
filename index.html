@@ -230,6 +230,19 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .install-tip { flex-basis: 100%; margin: 0; padding: 6px 10px; font-size: 12px; color: var(--ink-2); background: var(--surface); border: 1px solid var(--line); border-radius: 6px; }
 .newsbtn { position: relative; display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 12px; font: inherit; font-size: 13px; font-weight: 700; color: var(--ink); background: var(--surface); border: 1px solid var(--line); border-radius: 999px; cursor: pointer; }
 .newsdot { position: absolute; top: 4px; right: 6px; min-width: 10px; height: 10px; border-radius: 50%; background: #d64533; border: 2px solid var(--surface); box-sizing: content-box; }
+.banner-b { flex: none; align-self: center; min-height: 32px; padding: 0 10px; border: 1px solid var(--accent); border-radius: 6px; background: transparent; color: inherit; font: inherit; font-size: 12px; cursor: pointer; }
+#map { width: min(520px, calc(100vw - 24px)); max-height: min(88vh, 760px); padding: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font-family: var(--f-body); overflow: hidden; }
+#map[open] { display: flex; flex-direction: column; }
+#map::backdrop { background: rgba(0, 0, 0, .5); }
+.map-head { padding: 14px 16px 6px; } .map-head h2 { margin: 0; font-size: 17px; }
+.map-body { padding: 4px 16px 8px; overflow-y: auto; flex: 1; }
+.map-src { margin: 4px 0 10px; font-size: 13px; line-height: 1.6; }
+.map-row { display: grid; grid-template-columns: 7em 1fr; align-items: center; gap: 8px; margin-bottom: 8px; }
+.map-row label { font-size: 13px; font-weight: 700; }
+.map-row select { width: 100%; min-width: 0; min-height: 40px; font-size: 16px; font-family: inherit; color: var(--ink); background: var(--bg, #fff); border: 1px solid var(--line); border-radius: 6px; padding: 4px 6px; }
+.map-auto { display: flex; gap: 8px; align-items: flex-start; margin-top: 10px; font-size: 13px; line-height: 1.5; }
+.map-foot { display: flex; gap: 8px; justify-content: flex-end; padding: 10px 16px 14px; border-top: 1px solid var(--line); }
+@media (max-width: 480px) { .map-row { grid-template-columns: 1fr; gap: 2px; } }
 #news { width: min(560px, calc(100vw - 24px)); max-height: min(80vh, 720px); padding: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font-family: var(--f-body); overflow: hidden; }
 #news[open] { display: flex; flex-direction: column; }
 #news::backdrop { background: rgba(0, 0, 0, .5); }
@@ -326,6 +339,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     <p class="lead">撮影済みの写真に、工事用の小黒板をあとから合成して書き出します。写真はこのページの中だけで処理されます。「サーバーに保存」を押したときだけ、保存先に送信されます。</p>
     <div class="banner" id="project-banner" role="status" hidden>
       <span id="project-text"></span>
+      <button type="button" class="banner-b" id="project-remap" hidden>割り当てを直す</button>
       <button type="button" class="banner-x" id="project-x" aria-label="閉じる">×</button>
     </div>
   </header>
@@ -543,6 +557,19 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     <button type="button" class="btn sub" id="ed-reset">加工を元に戻す</button>
     <button type="button" class="btn sub" id="ed-cancel">キャンセル</button>
     <button type="button" class="btn" id="ed-ok">適用</button>
+  </div>
+</dialog>
+
+<dialog id="map" aria-labelledby="map-title">
+  <div class="map-head"><h2 id="map-title">案件情報を黒板に入れる</h2></div>
+  <div class="map-body">
+    <p id="map-src" class="map-src"></p>
+    <div id="map-rows"></div>
+    <label class="map-auto"><input type="checkbox" id="map-auto"> 次から、同じ項目の組み合わせで届いたら確認せずに入れる</label>
+  </div>
+  <div class="map-foot">
+    <button type="button" class="btn sub" id="map-cancel">キャンセル</button>
+    <button type="button" class="btn" id="map-ok">入力する</button>
   </div>
 </dialog>
 
@@ -2233,9 +2260,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 
   /* ---------- お知らせ（アップデート情報） ---------- */
   // 新しいお知らせは、配列の先頭に追加します（id は増やしていく）。
-  var APP_VERSION = '2026.11.21';
+  var APP_VERSION = '2026.11.22';
   var NEWS_BASE_SEEN = 4;  // 初めて開く端末では、この番号より新しいお知らせだけを「未読」にする
   var NEWS = [
+    { id: 13, date: '2026-11-22', tag: '新機能', title: '案件情報は、どの欄に入れるかを聞いてから入力します', body: '現場アプリから開いたとき、届いた項目の一覧を見ながら、工事名・施工者・工種などの欄ごとに入れる項目を選べます。選んだ組み合わせは覚えるので、次からは確認なしで入れることもできます（「割り当てを直す」でいつでも変更可）。' },
     { id: 12, date: '2026-11-21', tag: '新機能', title: 'アプリ版も、現場アプリから案件情報を受け取れます', body: '現場アプリから黒板アプリ（スマホにインストールしたアプリ版）を開くときに、「kokuban://open?…」のリンクで案件情報を渡すと、起動と同時に工事名・施工者などが入力されます。黒板アプリがすでに開いているときも受け取ります。' },
     { id: 11, date: '2026-11-20', tag: '新機能', title: '現場アプリの案件情報を、そのまま黒板に入れられます', body: '現場アプリの案件から黒板アプリを開くと、案件情報から工事名・施工者・工種・場所・部屋番号・備考を読み取って、入力欄に自動で入れます。入力した項目は黒板にも表示されます。読み込んだあとも、違うところはそのまま直せます。' },
     { id: 10, date: '2026-11-19', tag: '改善', title: '加工の画面を全画面にしました', body: '「✎ 加工・書き込み」を開くと、画面全体に写真を大きく表示します。右上の「操作パネル」を押すと、操作パネルをたたんで写真をさらに大きくできます（もう一度押すと開きます）。' },
@@ -2320,38 +2348,48 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     }
     return null;
   }
-  // 入れ子のデータも含めて、「項目名 → 値」の表にする（浅い階層のものを優先）
+  // 入れ子のデータも含めて、受け取った項目の一覧にする（浅い階層のものを優先）
+  // c.list = [{label, value}]（画面に出す一覧）／ c.table = 正規化した項目名 → 一覧の番号
   // 親の名前をつなげた形（project.name → projectname）でも登録するので、customer.name と project.name を取り違えない
-  function flattenInfo(obj, out, depth, parent) {
+  var SKIP_KEYS = ['from', 'source', 'app', 'type'];
+  function flattenInfo(obj, c, depth, parent) {
     if (!obj || typeof obj !== 'object' || depth > 3) return;
-    if (Array.isArray(obj)) { if (obj.length && depth < 3) flattenInfo(obj[0], out, depth + 1, parent); return; }
+    if (Array.isArray(obj)) { if (obj.length && depth < 3) flattenInfo(obj[0], c, depth + 1, parent); return; }
     var nested = [];
     Object.keys(obj).forEach(function (k) {
       var v = obj[k];
       if (v && typeof v === 'object') nested.push([k, v]);
       else if ((typeof v === 'string' || typeof v === 'number') && String(v).trim() !== '') {
+        if (!parent && SKIP_KEYS.indexOf(normKey(k)) >= 0) return;
         var nk = normKey(k), t = cleanText(v);
-        if (parent) { var pk = normKey(parent + k); if (!(pk in out)) out[pk] = t; }
-        if (!(nk in out)) out[nk] = t;
+        if (!t || c.list.length >= 60) return;
+        var idx = c.list.length;
+        c.list.push({ label: parent ? parent + '.' + k : k, value: t });
+        if (parent) { var pk = normKey(parent + k); if (!(pk in c.table)) c.table[pk] = idx; }
+        if (!(nk in c.table)) c.table[nk] = idx;
       }
     });
     nested.sort(function (a, b) { return (PROJECT_CONTAINERS.indexOf(normKey(b[0])) >= 0) - (PROJECT_CONTAINERS.indexOf(normKey(a[0])) >= 0); });   // 「project」「案件」などの中を先に見る
-    nested.forEach(function (n) { flattenInfo(n[1], out, depth + 1, n[0]); });
+    nested.forEach(function (n) { flattenInfo(n[1], c, depth + 1, n[0]); });
   }
-  // 受け取ったデータ（文字列の表・オブジェクト）から、黒板の項目ごとの値を取り出す
-  function extractProject(src) {
-    var table = {};
-    if (src && typeof src === 'object') flattenInfo(src, table, 0, '');
-    var found = {};
+  function collectProject(src) {
+    var c = { list: [], table: {} };
+    if (src && typeof src === 'object') flattenInfo(src, c, 0, '');
+    return c;
+  }
+  // 項目名からの自動の見当（黒板の項目 → 一覧の番号）。選択肢の最初の候補にするだけ
+  function guessMapping(c) {
+    var g = {};
     ROW_IDS.forEach(function (id) {
       var al = PROJECT_ALIASES[id]; if (!al) return;
       for (var i = 0; i < al.length; i++) {
-        var v = table[normKey(al[i])];
-        if (v) { found[id] = v; break; }
+        var ix = c.table[normKey(al[i])];
+        if (ix != null) { g[id] = ix; break; }
       }
     });
-    return found;
+    return g;
   }
+
   // リンク（?a=b&...  と  #a=b&...）の値を集める
   function readUrlInfo(search, hash) {
     var obj = {}, hits = false;
@@ -2378,7 +2416,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     return { search: q >= 0 ? rest.slice(q + 1) : '', hash: hash };
   }
   var PROJECT_ROW_LABELS = { kouji: '工事名', sekou: '施工者', kojishu: '工種', sokuten: '測点・箇所', basho: '場所', heya: '部屋番号', bikou: '備考' };
-  function applyProject(found, sourceName) {
+  var MAP_FIELDS = ['kouji', 'sekou', 'kojishu', 'sokuten', 'basho', 'heya', 'bikou'];
+  var MAP_KEY = 'kokuban-map-v1';
+  var incoming = null;   // 直近に受け取った案件情報 {c, source}（「割り当てを直す」用）
+  function applyProject(found, sourceName, note) {
     var ids = Object.keys(found);
     if (!ids.length) return false;
     ids.forEach(function (id) {
@@ -2389,11 +2430,86 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     saveShared();
     if (cur >= 0) { syncForm(); requestDraw(); }
     var names = ids.map(function (id) { return PROJECT_ROW_LABELS[id]; });
-    $('#project-text').textContent = (sourceName || '現場アプリ') + 'の案件情報から、' + names.join('・') + 'を入力しました。違うところは、そのまま直せます。';
+    $('#project-text').textContent = (sourceName || '現場アプリ') + 'の案件情報から、' + names.join('・') + 'を入力しました。' + (note || '違うところは、そのまま直せます。');
+    $('#project-remap').hidden = !incoming;
     $('#project-banner').hidden = false;
     return true;
   }
   $('#project-x').addEventListener('click', function () { $('#project-banner').hidden = true; });
+
+  // ---- 割り当て確認（どの項目をどこに入れるか、開いたときに聞く） ----
+  function mapStore() { try { return JSON.parse(localStorage.getItem(MAP_KEY)) || {}; } catch (e) { return {}; } }
+  function mapSave(o) { try { localStorage.setItem(MAP_KEY, JSON.stringify(o)); } catch (e) {} }
+  function mapSig(c) { return c.list.map(function (e) { return normKey(e.label); }).sort().join('|'); }
+  function labelIndex(c, label) { for (var i = 0; i < c.list.length; i++) if (c.list[i].label === label) return i; return -1; }
+  function short(t, n) { return t.length > n ? t.slice(0, n) + '…' : t; }
+  function buildFound(c, pick) {   // pick: {field: index|-1}
+    var f = {};
+    MAP_FIELDS.forEach(function (id) { var ix = pick[id]; if (ix != null && ix >= 0 && c.list[ix]) f[id] = c.list[ix].value; });
+    return f;
+  }
+  function openMap(c, source) {
+    incoming = { c: c, source: source };
+    var saved = mapStore()[mapSig(c)], guess = guessMapping(c), pick = {};
+    MAP_FIELDS.forEach(function (id) {
+      var ix = -1;
+      if (saved && saved.map && id in saved.map) ix = saved.map[id] ? labelIndex(c, saved.map[id]) : -1;
+      else if (guess[id] != null) ix = guess[id];
+      pick[id] = ix;
+    });
+    var box = $('#map-rows'); box.innerHTML = '';
+    MAP_FIELDS.forEach(function (id) {
+      var row = document.createElement('div'); row.className = 'map-row';
+      var lab = document.createElement('label'); lab.textContent = PROJECT_ROW_LABELS[id]; lab.htmlFor = 'map-' + id;
+      var sel = document.createElement('select'); sel.id = 'map-' + id; sel.setAttribute('data-field', id);
+      var o0 = document.createElement('option'); o0.value = '-1'; o0.textContent = '（入れない）'; sel.appendChild(o0);
+      c.list.forEach(function (e, i) {
+        var o = document.createElement('option'); o.value = String(i); o.textContent = e.label + '：' + short(e.value, 30); sel.appendChild(o);
+      });
+      sel.value = String(pick[id]);
+      row.appendChild(lab); row.appendChild(sel); box.appendChild(row);
+    });
+    $('#map-auto').checked = !!(saved && saved.auto);
+    $('#map-src').textContent = (source || '現場アプリ') + 'から案件情報が届きました。黒板のどの欄に、どの項目を入れますか。';
+    var dlg = $('#map');
+    if (dlg.showModal) { if (!dlg.open) dlg.showModal(); } else dlg.setAttribute('open', '');
+  }
+  function closeMap() { var d = $('#map'); if (d.close) d.close(); else d.removeAttribute('open'); }
+  $('#map-cancel').addEventListener('click', closeMap);
+  $('#map').addEventListener('click', function (e) { if (e.target === this) closeMap(); });
+  $('#map-ok').addEventListener('click', function () {
+    if (!incoming) { closeMap(); return; }
+    var c = incoming.c, pick = {}, map = {};
+    MAP_FIELDS.forEach(function (id) {
+      var ix = parseInt($('#map-' + id).value, 10); pick[id] = ix;
+      map[id] = ix >= 0 && c.list[ix] ? c.list[ix].label : '';
+    });
+    var all = mapStore(), keys = Object.keys(all);
+    if (keys.length > 30) delete all[keys[0]];
+    all[mapSig(c)] = { map: map, auto: $('#map-auto').checked };
+    mapSave(all);
+    closeMap();
+    if (!applyProject(buildFound(c, pick), incoming.source)) {
+      $('#project-text').textContent = '入れる項目が選ばれていないので、何も入力していません。';
+      $('#project-remap').hidden = false; $('#project-banner').hidden = false;
+    }
+  });
+  $('#project-remap').addEventListener('click', function () { if (incoming) openMap(incoming.c, incoming.source); });
+
+  // 案件情報を受け取ったときの入口（リンク・postMessage・アプリ間リンクのすべてここを通る）
+  function receiveProject(obj, source) {
+    var c = collectProject(obj);
+    if (!c.list.length) return false;
+    var saved = mapStore()[mapSig(c)];
+    if (saved && saved.auto && saved.map) {   // 「次から確認しない」にした組み合わせは、そのまま入れる
+      var pick = {};
+      MAP_FIELDS.forEach(function (id) { pick[id] = saved.map[id] ? labelIndex(c, saved.map[id]) : -1; });
+      incoming = { c: c, source: source };
+      if (applyProject(buildFound(c, pick), source, '割り当ては前回のとおりです。')) return true;
+    }
+    openMap(c, source);
+    return true;
+  }
   // 現場アプリが window.open で開いた場合・埋め込んだ場合は、postMessage でも受け取る
   window.addEventListener('message', function (ev) {
     var okSrc = (window.opener && ev.source === window.opener) || (window.parent !== window && ev.source === window.parent);
@@ -2401,7 +2517,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     var d = ev.data;
     if (typeof d === 'string') d = parseJsonLoose(d);
     if (!d || typeof d !== 'object' || d.type !== 'kokuban:project') return;
-    applyProject(extractProject(d.project || d.data || d), d.source ? cleanText(d.source) : '');
+    receiveProject(d.project || d.data || d, d.source ? cleanText(d.source) : '');
   });
   try {   // 開いたことを現場アプリに知らせる（案件情報は含まない）
     var opener = window.opener && window.opener !== window ? window.opener : (window.parent !== window ? window.parent : null);
@@ -2411,7 +2527,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   function projectFromAppUrl(url) {
     if (!url || String(url).indexOf('kokuban:') !== 0) return;
     var parts = splitUrl(url), u = readUrlInfo(parts.search, parts.hash), from = u.obj.from || u.obj.source || u.obj.app || '';
-    applyProject(extractProject(u.obj), from ? cleanText(from) : '');
+    receiveProject(u.obj, from ? cleanText(from) : '');
   }
   function startNativeLinks() {
     var C = window.Capacitor, A = C && C.Plugins && C.Plugins.App;
@@ -2423,9 +2539,8 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   }
   function startProject() {
     startNativeLinks();
-    var u = readUrlInfo(), found = extractProject(u.obj);
-    var from = u.obj.from || u.obj.source || u.obj.app || '';
-    var ok = applyProject(found, from ? cleanText(from) : '');
+    var u = readUrlInfo(), from = u.obj.from || u.obj.source || u.obj.app || '';
+    var ok = receiveProject(u.obj, from ? cleanText(from) : '');
     if (ok || u.hits) {   // 読み込んだら、リンクの情報部分を消す（再読み込みで二重に入らないように）
       try { history.replaceState(null, '', location.pathname); } catch (e) {}
     }
