@@ -383,7 +383,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
             <label class="lbl" for="f-kojishu">工種</label>
             <input type="text" id="f-kojishu" list="kojishu-list" maxlength="30" autocomplete="off">
             <datalist id="kojishu-list">
-              <option value="クリーニング工"></option><option value="土工"></option><option value="鉄筋工"></option><option value="型枠工"></option>
+              <option value="クリーニング工"></option><option value="除草工"></option><option value="土工"></option><option value="鉄筋工"></option><option value="型枠工"></option>
               <option value="コンクリート工"></option><option value="基礎工"></option><option value="舗装工"></option>
               <option value="管布設工"></option><option value="仮設工"></option><option value="出来形管理"></option>
             </datalist>
@@ -2260,9 +2260,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 
   /* ---------- お知らせ（アップデート情報） ---------- */
   // 新しいお知らせは、配列の先頭に追加します（id は増やしていく）。
-  var APP_VERSION = '2026.11.22';
+  var APP_VERSION = '2026.11.23';
   var NEWS_BASE_SEEN = 4;  // 初めて開く端末では、この番号より新しいお知らせだけを「未読」にする
   var NEWS = [
+    { id: 14, date: '2026-11-23', tag: '改善', title: '工種に「除草工」を追加しました', body: '工種の入力欄で「除草工」を候補から選べます。' },
     { id: 13, date: '2026-11-22', tag: '新機能', title: '案件情報は、どの欄に入れるかを聞いてから入力します', body: '現場アプリから開いたとき、届いた項目の一覧を見ながら、工事名・施工者・工種などの欄ごとに入れる項目を選べます。選んだ組み合わせは覚えるので、次からは確認なしで入れることもできます（「割り当てを直す」でいつでも変更可）。' },
     { id: 12, date: '2026-11-21', tag: '新機能', title: 'アプリ版も、現場アプリから案件情報を受け取れます', body: '現場アプリから黒板アプリ（スマホにインストールしたアプリ版）を開くときに、「kokuban://open?…」のリンクで案件情報を渡すと、起動と同時に工事名・施工者などが入力されます。黒板アプリがすでに開いているときも受け取ります。' },
     { id: 11, date: '2026-11-20', tag: '新機能', title: '現場アプリの案件情報を、そのまま黒板に入れられます', body: '現場アプリの案件から黒板アプリを開くと、案件情報から工事名・施工者・工種・場所・部屋番号・備考を読み取って、入力欄に自動で入れます。入力した項目は黒板にも表示されます。読み込んだあとも、違うところはそのまま直せます。' },
