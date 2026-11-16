@@ -89,6 +89,60 @@ npx cap sync ios
 1. `index.html` の `NEWS` の先頭に、お知らせを1件足す（`id` は前より大きい番号、`APP_VERSION` も更新）
 2. `sw.js` の `VER` の番号を上げる（`kokuban-v2` → `kokuban-v3`）。アプリを開いている人には「アプリが更新されました。［再読み込み］」が出ます
 
+## 現場アプリとの連携（案件情報を自動入力）
+
+現場アプリの案件から黒板アプリを開くときに、案件の情報をリンクに付けると、必要な項目を読み取って入力欄に自動で入れます（黒板にも反映）。入れた項目は黒板に表示される設定になり、あとから自由に直せます。
+
+**1. リンクに付ける（いちばん簡単）**
+
+```
+https://（あなたのドメイン）.vercel.app/?工事名=南町マンション大規模修繕&施工者=株式会社三桜&工種=クリーニング工&場所=共用廊下&部屋番号=301&備考=足場解体後
+```
+
+値は URL エンコードしてください（`encodeURIComponent`）。`#` の後ろ（`#工事名=…`）でも同じです。
+
+**2. 案件のデータ（JSON）をまとめて渡す**
+
+項目名が現場アプリ側の名前のままでも、入れ子になっていても読み取ります。
+
+```js
+const project = { id: 55, project: { name: '南町マンション大規模修繕', contractor: { company: '株式会社三桜' }, location: '共用廊下' }, memo: '足場解体後' };
+window.open('https://（あなたのドメイン）.vercel.app/?project=' + encodeURIComponent(JSON.stringify(project)));
+```
+
+`project=`（または `data=` / `info=` / `案件=`）に、JSON を URL エンコードしたもの、または base64（URL安全）にしたものを入れられます。
+
+**3. postMessage で渡す（window.open で開く／iframeで埋め込む場合）**
+
+```js
+const w = window.open('https://（あなたのドメイン）.vercel.app/');
+window.addEventListener('message', (e) => {
+  if (e.source === w && e.data && e.data.type === 'kokuban:ready') {   // 黒板アプリの準備ができたら
+    w.postMessage({ type: 'kokuban:project', source: '現場管理アプリ', project: { 工事名: '…', 施工者: '…' } }, 'https://（あなたのドメイン）.vercel.app');
+  }
+});
+```
+
+黒板アプリは、自分を開いた画面（または埋め込んだ画面）からのメッセージだけを受け取ります。
+
+**読み取る項目名**（大文字小文字・空白・`_`・`-` は区別しません。左から優先）
+
+| 黒板の項目 | 読み取る名前 |
+|---|---|
+| 工事名 | 工事名 / 工事名称 / 案件名 / 現場名 / kouji / project / projectName / siteName / title / name |
+| 施工者 | 施工者 / 施工会社 / 請負者 / 会社名 / sekou / contractor / company / builder |
+| 工種 | 工種 / kojishu / workType / trade |
+| 測点・箇所 | 測点 / 箇所 / sokuten / station |
+| 場所 | 場所 / 工事場所 / basho / place / location |
+| 部屋番号 | 部屋番号 / 号室 / heya / room / roomNo |
+| 備考 | 備考 / メモ / bikou / note / memo / remarks / comment |
+
+- 撮影日は、写真のExifから自動で入ります（案件情報では入れません）
+- 1項目あたり200文字まで。文字として扱うので、HTMLなどは実行されません
+- 読み込んだあと、リンクの情報部分（`?…`）は消します。再読み込みしても二重に入りません
+- 案件情報を使わずに開いたときは、前回の入力内容がそのまま残ります
+- アプリ版（Capacitor）への受け渡しは、まだ対応していません（Webのリンクから開く場合のみ）
+
 ## 注意
 
 - 公共工事の提出写真では、撮影後の加工を認めない基準があります。提出先の要領を確認してください。

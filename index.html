@@ -144,6 +144,9 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 .btn { width: 100%; font: inherit; font-weight: 700; font-size: 15px; border-radius: 6px; padding: 12px 16px; cursor: pointer; border: 1px solid var(--accent); background: var(--accent); color: var(--accent-ink); }
 .btn.sub { background: transparent; color: var(--ink); border-color: var(--line); font-weight: 500; }
 .btn:disabled { opacity: .5; cursor: default; }
+.banner { flex-basis: 100%; display: flex; align-items: flex-start; gap: 8px; padding: 8px 8px 8px 12px; font-size: 13px; line-height: 1.5; color: var(--ink); background: var(--surface); border: 1px solid var(--accent); border-left-width: 5px; border-radius: 6px; }
+.banner span { flex: 1; overflow-wrap: anywhere; }
+.banner-x { flex: none; width: 32px; height: 32px; border: 0; background: transparent; color: inherit; font-size: 18px; cursor: pointer; }
 .status { margin: 0; min-height: 1.6em; font-size: 13px; color: var(--ink-2); }
 .note { margin: 0; color: var(--ink-2); font-size: 12px; max-width: 72ch; }
 
@@ -321,6 +324,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
     </div>
     <p class="install-tip" id="install-tip" hidden>iPhone: 画面下の共有ボタン（□に↑）→「ホーム画面に追加」でアプリとして使えます。</p>
     <p class="lead">撮影済みの写真に、工事用の小黒板をあとから合成して書き出します。写真はこのページの中だけで処理されます。「サーバーに保存」を押したときだけ、保存先に送信されます。</p>
+    <div class="banner" id="project-banner" role="status" hidden>
+      <span id="project-text"></span>
+      <button type="button" class="banner-x" id="project-x" aria-label="閉じる">×</button>
+    </div>
   </header>
 
   <main class="app">
@@ -2226,9 +2233,10 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
 
   /* ---------- お知らせ（アップデート情報） ---------- */
   // 新しいお知らせは、配列の先頭に追加します（id は増やしていく）。
-  var APP_VERSION = '2026.11.19';
+  var APP_VERSION = '2026.11.20';
   var NEWS_BASE_SEEN = 4;  // 初めて開く端末では、この番号より新しいお知らせだけを「未読」にする
   var NEWS = [
+    { id: 11, date: '2026-11-20', tag: '新機能', title: '現場アプリの案件情報を、そのまま黒板に入れられます', body: '現場アプリの案件から黒板アプリを開くと、案件情報から工事名・施工者・工種・場所・部屋番号・備考を読み取って、入力欄に自動で入れます。入力した項目は黒板にも表示されます。読み込んだあとも、違うところはそのまま直せます。' },
     { id: 10, date: '2026-11-19', tag: '改善', title: '加工の画面を全画面にしました', body: '「✎ 加工・書き込み」を開くと、画面全体に写真を大きく表示します。右上の「操作パネル」を押すと、操作パネルをたたんで写真をさらに大きくできます（もう一度押すと開きます）。' },
     { id: 9, date: '2026-11-18', tag: '改善', title: '加工と書き込みをひとつの画面にまとめ、写真を大きく表示しました', body: '写真の上の「✎ 加工・書き込み」で、「回転・切り抜き・色」と「文字・図形」を同じ画面で切り替えて使えます。写真は画面いっぱいに大きく表示されます（パソコンでは、右側に操作パネルが並びます）。「適用」を押すまで写真は変わらないので、「キャンセル」で全部取り消せます。' },
     { id: 8, date: '2026-11-17', tag: '新機能', title: '写真に文字・図形を入れられます', body: '写真の上の「✎ 加工・書き込み」の「文字・図形」タブから、次を書き込めます。\n・文字（背景なし／白／黒、大きさ・色を変更）\n・四角、丸、矢印（色・太さ・薄い塗りつぶし）\n置いたあとに動かしたり、大きさを変えたり、削除できます。「1つ戻す」も使えます。\n書き込みは写真ごとに保存され、書き出しやまとめて保存にも反映されます。黒板は書き込みの上に重なります。' },
@@ -2280,6 +2288,127 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   $('#toast-reload').addEventListener('click', function () { location.reload(); });
   $('#toast-x').addEventListener('click', function () { $('#toast').hidden = true; });
 
+
+  /* ---------- 現場アプリの案件情報を受け取って入力する ---------- */
+  // 現場アプリからこのアプリを開くとき、案件の情報をリンクの後ろに付ける（または postMessage で渡す）と、
+  // 必要な項目（工事名・施工者・工種・場所 など）を読み取って、黒板の入力欄に自動で入れる。
+  // 項目名は、日本語・ローマ字・英語のどれでもよい（例: 工事名 / kouji / projectName）。
+  var PROJECT_ALIASES = {
+    kouji: ['kouji', 'koujimei', 'koujimeishou', '工事名', '工事名称', '案件名', '現場名', 'project', 'projectname', 'projecttitle', 'constructionname', 'sitename', 'site', 'title', '案件', '現場', 'name'],
+    sekou: ['sekou', 'sekousha', '施工者', '施工会社', '施工業者', '請負者', '請負業者', '会社名', 'contractor', 'company', 'companyname', 'builder', 'vendor', '会社'],
+    kojishu: ['kojishu', '工種', '工種名', 'worktype', 'worktypename', 'trade'],
+    sokuten: ['sokuten', '測点', '測点箇所', '測点・箇所', '箇所', 'measurementpoint', 'station'],
+    basho: ['basho', '場所', '工事場所', 'place', 'location'],
+    heya: ['heya', '部屋番号', '部屋', '号室', 'room', 'roomno', 'roomnumber'],
+    bikou: ['bikou', '備考', 'メモ', 'note', 'notes', 'memo', 'remarks', 'comment']
+  };
+  var PROJECT_CONTAINERS = ['project', 'data', 'info', 'anken', '案件', '案件情報', 'json'];
+  function normKey(k) { return String(k).toLowerCase().replace(/[\s_\-.　]/g, ''); }
+  function cleanText(v) {
+    return String(v).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, '').replace(/\r\n?/g, '\n').trim().slice(0, 200);
+  }
+  // 文字列を JSON として読む（そのまま／URLエンコード／base64 のどれでも）
+  function parseJsonLoose(t) {
+    var cands = [String(t)];
+    try { cands.push(decodeURIComponent(String(t))); } catch (e) {}
+    try { var b = String(t).replace(/-/g, '+').replace(/_/g, '/'); cands.push(decodeURIComponent(escape(atob(b)))); } catch (e) {}
+    for (var i = 0; i < cands.length; i++) {
+      var c = cands[i].trim();
+      if (c.charAt(0) !== '{' && c.charAt(0) !== '[') continue;
+      try { var o = JSON.parse(c); if (o && typeof o === 'object') return o; } catch (e) {}
+    }
+    return null;
+  }
+  // 入れ子のデータも含めて、「項目名 → 値」の表にする（浅い階層のものを優先）
+  // 親の名前をつなげた形（project.name → projectname）でも登録するので、customer.name と project.name を取り違えない
+  function flattenInfo(obj, out, depth, parent) {
+    if (!obj || typeof obj !== 'object' || depth > 3) return;
+    if (Array.isArray(obj)) { if (obj.length && depth < 3) flattenInfo(obj[0], out, depth + 1, parent); return; }
+    var nested = [];
+    Object.keys(obj).forEach(function (k) {
+      var v = obj[k];
+      if (v && typeof v === 'object') nested.push([k, v]);
+      else if ((typeof v === 'string' || typeof v === 'number') && String(v).trim() !== '') {
+        var nk = normKey(k), t = cleanText(v);
+        if (parent) { var pk = normKey(parent + k); if (!(pk in out)) out[pk] = t; }
+        if (!(nk in out)) out[nk] = t;
+      }
+    });
+    nested.sort(function (a, b) { return (PROJECT_CONTAINERS.indexOf(normKey(b[0])) >= 0) - (PROJECT_CONTAINERS.indexOf(normKey(a[0])) >= 0); });   // 「project」「案件」などの中を先に見る
+    nested.forEach(function (n) { flattenInfo(n[1], out, depth + 1, n[0]); });
+  }
+  // 受け取ったデータ（文字列の表・オブジェクト）から、黒板の項目ごとの値を取り出す
+  function extractProject(src) {
+    var table = {};
+    if (src && typeof src === 'object') flattenInfo(src, table, 0, '');
+    var found = {};
+    ROW_IDS.forEach(function (id) {
+      var al = PROJECT_ALIASES[id]; if (!al) return;
+      for (var i = 0; i < al.length; i++) {
+        var v = table[normKey(al[i])];
+        if (v) { found[id] = v; break; }
+      }
+    });
+    return found;
+  }
+  // リンク（?a=b&...  と  #a=b&...）の値を集める
+  function readUrlInfo() {
+    var obj = {}, hits = false;
+    function take(str) {
+      if (!str) return;
+      var sp; try { sp = new URLSearchParams(str); } catch (e) { return; }
+      sp.forEach(function (v, k) {
+        var nk = normKey(k);
+        if (PROJECT_CONTAINERS.indexOf(nk) >= 0 || PROJECT_CONTAINERS.indexOf(k) >= 0) {
+          var j = parseJsonLoose(v);
+          if (j) { Object.keys(j).forEach(function (jk) { if (!(jk in obj)) obj[jk] = j[jk]; }); hits = true; return; }
+        }
+        if (!(k in obj)) obj[k] = v;
+      });
+    }
+    take(location.search.replace(/^\?/, ''));
+    take(location.hash.replace(/^#/, ''));
+    return { obj: obj, hits: hits };
+  }
+  var PROJECT_ROW_LABELS = { kouji: '工事名', sekou: '施工者', kojishu: '工種', sokuten: '測点・箇所', basho: '場所', heya: '部屋番号', bikou: '備考' };
+  function applyProject(found, sourceName) {
+    var ids = Object.keys(found);
+    if (!ids.length) return false;
+    ids.forEach(function (id) {
+      shared.vals[id] = found[id];
+      photos.forEach(function (ph) { if (ph.vals) ph.vals[id] = found[id]; });
+      for (var i = 0; i < shared.rows.length; i++) if (shared.rows[i].id === id) shared.rows[i].on = true;   // 値が入った項目は黒板に出す
+    });
+    saveShared();
+    if (cur >= 0) { syncForm(); requestDraw(); }
+    var names = ids.map(function (id) { return PROJECT_ROW_LABELS[id]; });
+    $('#project-text').textContent = (sourceName || '現場アプリ') + 'の案件情報から、' + names.join('・') + 'を入力しました。違うところは、そのまま直せます。';
+    $('#project-banner').hidden = false;
+    return true;
+  }
+  $('#project-x').addEventListener('click', function () { $('#project-banner').hidden = true; });
+  // 現場アプリが window.open で開いた場合・埋め込んだ場合は、postMessage でも受け取る
+  window.addEventListener('message', function (ev) {
+    var okSrc = (window.opener && ev.source === window.opener) || (window.parent !== window && ev.source === window.parent);
+    if (!okSrc) return;   // 自分を開いた画面（または埋め込んだ画面）からだけ受け取る
+    var d = ev.data;
+    if (typeof d === 'string') d = parseJsonLoose(d);
+    if (!d || typeof d !== 'object' || d.type !== 'kokuban:project') return;
+    applyProject(extractProject(d.project || d.data || d), d.source ? cleanText(d.source) : '');
+  });
+  try {   // 開いたことを現場アプリに知らせる（案件情報は含まない）
+    var opener = window.opener && window.opener !== window ? window.opener : (window.parent !== window ? window.parent : null);
+    if (opener) opener.postMessage({ type: 'kokuban:ready' }, '*');
+  } catch (e) {}
+  function startProject() {
+    var u = readUrlInfo(), found = extractProject(u.obj);
+    var from = u.obj.from || u.obj.source || u.obj.app || '';
+    var ok = applyProject(found, from ? cleanText(from) : '');
+    if (ok || u.hits) {   // 読み込んだら、リンクの情報部分を消す（再読み込みで二重に入らないように）
+      try { history.replaceState(null, '', location.pathname); } catch (e) {}
+    }
+  }
+
   /* ---------- 起動 ---------- */
   photos = [makeSample()];
   cur = 0;
@@ -2288,6 +2417,7 @@ input[type="range"] { width: 100%; accent-color: var(--accent); }
   renderStrip();
   syncForm();
   requestDraw();
+  startProject();
   probeServer();
 })();
 </script>
